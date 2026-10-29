@@ -38,9 +38,12 @@ The working prototype must:
 # PRE-REQUISITES
 - Use Docker and Docker Compose.
 - Primary host target: Ubuntu 24.04.4 LTS with Python 3.12.3.
-- Use MinIO as S3-compatible object storage, deployed as a Docker Compose service using a suitable container image.
+- Use RustFS as S3-compatible object storage, deployed as a Docker Compose service using the pinned `rustfs/rustfs:1.0.4-glibc` image.
 - Use Qdrant as the vector database, deployed as a Docker Compose service using a suitable container image.
 - Pin compatible container image versions rather than relying on floating `latest` tags.
+- Treat RustFS as an S3-compatible infrastructure adapter: keep application configuration and repository interfaces provider-neutral where practical.
+- The initial RustFS deployment is single-node, single-disk development storage without redundancy. Do not present it as a production storage topology.
+- Do not reuse a MinIO data volume as a RustFS data volume. Migrate existing objects through the S3 API because MinIO on-disk compatibility is not assumed.
 
 ## Repository structure
 - `enterprise-rag-indexing`: Implements the disposable, asynchronous document indexing pipeline.
@@ -87,6 +90,7 @@ The working prototype must:
   - Return an answer and source references derived from retrieved chunk metadata.
   - Include logging, configuration management, and error handling.
 - Use FastAPI for REST endpoints and Granian as the ASGI server.
+  - Implement an UnhandledExceptionMiddleware in order to prevent undecessary events to end-user.
 - Keep the LLM provider and model configurable; do not hard-code credentials or claim a provider selection has already been made.
 - Streaming, reranking, hybrid search, memory, and multi-agent behavior remain future enhancements unless explicitly requested.
 
@@ -95,7 +99,7 @@ The working prototype must:
 - Keep `docker-compose.yaml` in this orchestration repository.
 - Include:
   - Qdrant service with a named Docker volume for persistence.
-  - MinIO service with a named Docker volume for persistence.
+  - RustFS service with a dedicated named Docker volume for persistence.
   - `enterprise-rag-indexing` service with a bind mount of the local source directory for fast development.
   - `enterprise-rag-query` service for the working end-to-end RAG demonstration.
 - Keep indexing as an on-demand, one-shot Compose job; do not force it to run indefinitely as a daemon.
@@ -118,7 +122,7 @@ The working prototype must:
 
 ## Clean Architecture conventions
 - Organize implementation into the following logical layers:
-  - **Repositories:** Infrastructure and external-data access adapters (S3/MinIO, Qdrant, embedding APIs, LLM APIs). Keep business logic out of repositories.
+  - **Repositories:** Infrastructure and external-data access adapters (S3/RustFS, Qdrant, embedding APIs, LLM APIs). Keep business logic out of repositories.
   - **Usecases:** Application business logic. Preserve the original preference of one primary repository dependency per use case; when an operation requires several repositories, coordinate multiple use cases through a controller rather than bypassing this rule silently.
   - **Controllers:** Orchestrate multiple use cases when an operation is too complex for a single use case. Do not add controllers that only pass through a single call without value.
   - **REST API:** Follow REST principles. Each FastAPI endpoint invokes one use case or one controller.
@@ -136,13 +140,13 @@ The working prototype must:
   ```
 
 - Build dependencies in the application composition/startup layer; do not create infrastructure clients inside business use case methods.
-- Do not test external repository integrations as unit tests. **Do** unit-test use cases, controllers, factories, and pure transformations with mocks/fakes for repositories. Test MinIO/Qdrant integrations separately with integration tests.
+- Do not test external repository integrations as unit tests. **Do** unit-test use cases, controllers, factories, and pure transformations with mocks/fakes for repositories. Test RustFS/Qdrant integrations separately with integration tests.
 - Centralize configuration validation and exception handling. Preserve error causes in logs; avoid exposing internal exceptions or secrets through REST responses.
 - For REST APIs, always use FastAPI and run with Granian.
 
 ## Delivery and implementation sequence
 1. Establish repository layout, dependency installation, environment configuration, and Docker Compose infrastructure.
-2. Implement the PDF indexing path: MinIO -> extraction -> chunking -> embedding -> Qdrant, including source metadata.
+2. Implement the PDF indexing path: RustFS -> extraction -> chunking -> embedding -> Qdrant, including source metadata.
 3. Implement the minimum query path: question -> query embedding -> retrieval -> LLM -> answer with citations.
 4. Add meaningful unit/integration tests, documentation, logging, and error handling.
 5. Verify the complete end-to-end prototype locally before adding optional enhancements.
@@ -150,7 +154,7 @@ The working prototype must:
 
 ## Rules for coding agents
 - Follow the repository boundaries and coding conventions above; keep changes small and readable.
-- Preserve explicitly selected technology choices (MinIO, Qdrant, FastAPI, Granian, Docker Compose, `virtualenv`, Git submodules).
+- Preserve explicitly selected technology choices (RustFS, Qdrant, FastAPI, Granian, Docker Compose, `virtualenv`, Git submodules).
 - Do not replace the one-shot async indexing job with an always-on service or external task queue without approval.
 - Do not present unimplemented bonus features as implemented.
 - If a requirement is ambiguous or technically unsafe, state the tradeoff and propose the smallest compatible change before making a significant architectural departure.

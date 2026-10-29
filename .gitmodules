@@ -1,0 +1,6 @@
+[submodule "enterprise-rag-indexing"]
+	path = enterprise-rag-indexing
+	url = https://github.com/tolga-kabadurmus/enterprise-rag-indexing.git
+[submodule "enterprise-rag-query"]
+	path = enterprise-rag-query
+	url = https://github.com/tolga-kabadurmus/enterprise-rag-query.git

@@ -73,7 +73,7 @@ services:
       qdrant:
         condition: service_healthy
     volumes:
-      - ./enterprise-rag-indexing/app:/app
+      - ./enterprise-rag-indexing/app:/app/app
     command:
       - /bin/sh
       - -c

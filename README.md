@@ -56,9 +56,14 @@ docker compose logs -f rustfs qdrant
 ```
 Execute an on-demand indexing job (use the actual CLI flags implemented by the indexing application):
 ```bash
-docker compose run --rm enterprise-rag-indexing --source-bucket documents --key-prefix ""
+docker compose --profile dev run --rm enterprise-rag-indexing \
+  python -m app.main \
+  --pipeline mock-pdf \
+  --source-bucket documents \
+  --key-prefix contracts/2026/ \
+  --concurrency 4
 ```
-The command above is an illustrative CLI contract. It requires the indexing image to expose the application command as its entrypoint and accept `--source-bucket` and `--key-prefix`. Keep `dumb-init` as the image's PID 1 process. If the implementation chooses another CLI or entrypoint layout, update this example to match it. An explicit staging bucket may also be required by the final application configuration.
+The command currently runs a clearly logged mock indexing job. It validates the container, CLI, async lifecycle, bounded concurrency, deterministic IDs, and cleanup, but does not read RustFS or write Qdrant. Keep `dumb-init` as the image's PID 1 process. The command and documentation must be updated when the real PDF pipeline replaces the mock.
 When the query application provides an HTTP endpoint, use the API and documentation URLs defined by the published ports in `docker-compose.yaml`. No host port or endpoint path is fixed yet.
 Stop the running services without deleting persistent data:
 ```bash

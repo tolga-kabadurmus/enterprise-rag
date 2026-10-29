@@ -80,6 +80,29 @@ The working prototype must:
 - Handle empty documents, unsupported content types, extraction failures, embedding/provider failures, and vector database failures without corrupting the batch state.
 - Log object identifiers, document counts, chunk counts, elapsed time, and failures. Do not log secret values or full document contents by default.
 
+## PLANNED: VERSIONED S3 DOCUMENT INDEXING PIPELINE
+- Status: approved design for later implementation; do not describe it as implemented until its code and tests exist.
+- Treat the CLI `--pipeline` value as a workflow version, initially `v1`, rather than as a document content type. Keep older pipeline behavior stable when a later version such as `v2` is introduced.
+- Keep the three selection responsibilities distinct:
+  - The pipeline registry selects the versioned top-level `AsyncIndexingJob` (`v1`, later `v2`).
+  - `DocumentIndexerFactory` selects PDF, Word, HTML, or another document indexer from a normalized content type.
+  - Infrastructure `RepositoryFactory` creates S3, Qdrant, embedding, and other external-service repositories; it must not select document processors by content type.
+- Implement the S3 repository before the document processors. Define shared repository contracts and object metadata models containing at least bucket, key, size, ETag, content type, and last-modified time.
+- Implement a RustFS-compatible S3 repository with `boto3`. Read endpoint, credentials, region, addressing style, and TLS verification from validated environment configuration. Do not log credentials.
+- Keep the indexing application asynchronous. Since `boto3` is blocking, execute its calls through a bounded `asyncio.to_thread()` boundary and close its client during asynchronous job cleanup.
+- Support both an exact `--object-key` and all objects under the requested bucket/optional `--key-prefix`. Paginate `list_objects_v2`; do not assume the bucket contains at most 1,000 objects.
+- `V1IndexingPipeline` must iterate the complete selection, isolate per-object failures, and process objects with bounded `asyncio.gather()` batches plus an `asyncio.Semaphore`. Do not create an unbounded task for every object in a large bucket.
+- Resolve each object's content type before selecting its document indexer. Because S3 list responses do not normally contain content type, use object metadata/`head_object`; normalize MIME values and document any extension fallback for missing or generic content types.
+- Initially map content types as follows:
+  - `application/pdf` -> real `PDFDocumentIndexer`, using embedded PDF text first and RapidOCR fallback for pages without useful text.
+  - Word MIME types -> `MockWordDocumentIndexer`.
+  - `text/html` and `application/xhtml+xml` -> `MockHTMLDocumentIndexer`.
+  - Unknown types -> an explicit unsupported-content-type result; log and skip them without corrupting the batch.
+- Word and HTML mocks must report a distinct mocked/skipped status. They must not fabricate production document text, embeddings, Qdrant points, or successful indexing claims.
+- Preserve deterministic document/chunk identities and source metadata. During this stage, do not delete or move source objects; document that overlapping jobs remain unsafe until the claim/locking workflow is implemented.
+- Unit-test S3 pagination, exact-key access, configuration, cleanup, factory routing, MIME normalization, unsupported types, bounded concurrency, deterministic IDs, and per-object failure isolation with fakes/mocks. Keep live RustFS checks in separate integration tests.
+- Update MkDocs and README documentation with the same implementation change, including the `v1` lifecycle, S3 environment variables, supported MIME mappings, mocked behavior, concurrency, retry limitations, and generated API references. Validate with unit tests, `mkdocs build --strict`, and `docker compose --profile dev config`.
+
 ## enterprise-rag-query
 - Detailed internal design: to be defined later.
 - Minimum required behavior for the coding exercise:

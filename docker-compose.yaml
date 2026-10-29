@@ -43,6 +43,46 @@ services:
       start_period: 10s
     # restart: unless-stopped
 
+  # Build this shared image before the child application images.
+  enterprise-rag-base:
+    profiles: ["dev", "prod"]
+    build:
+      context: .
+      dockerfile: Dockerfiles/enterprise-rag-base
+    command:
+      - /bin/sh
+      - -c
+      - |
+        while true; do
+          echo "sleeping"
+          sleep 60
+        done
+
+  enterprise-rag-indexing:
+    profiles: ["dev"]
+    build:
+      context: ./enterprise-rag-indexing
+      dockerfile: Dockerfiles/enterprise-rag-indexing
+      additional_contexts:
+        enterprise_rag_base: service:enterprise-rag-base
+    depends_on:
+      enterprise-rag-base:
+        condition: service_started
+      rustfs:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+    volumes:
+      - ./enterprise-rag-indexing/app:/app
+    command:
+      - /bin/sh
+      - -c
+      - |
+        while true; do
+          echo "sleeping"
+          sleep 5
+        done
+
 volumes:
   rustfs-data:
   qdrant-data:

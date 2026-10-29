@@ -40,7 +40,11 @@ To intentionally advance a submodule to newer commits, update it inside its dire
 Run the complete project
 Prerequisites: Docker Engine with the Compose v2 plugin; Git; Python 3.12.3 and `virtualenv` for host-based Python development. The primary target is Ubuntu 24.04.4 LTS.
 Clone with submodules using the command above, or update them if already cloned. Copy each file in `dev-envs/` by removing its `.example` suffix, then set RustFS credentials, S3 endpoints, Qdrant connection details, and embedding/LLM provider settings. Do not commit secrets.
-The current root `docker-compose.yaml` implements development services named `rustfs` and `qdrant`. The application services will be added when their Dockerfiles and entrypoints are available.
+The current root `docker-compose.yaml` implements development services named `rustfs`, `qdrant`, `enterprise-rag-base`, and `enterprise-rag-indexing`. The indexing build consumes `enterprise-rag-base` as a service-backed build context, so Compose builds the base image before the indexing image. Its runtime dependency also starts the base service before the indexing service.
+Build the indexing image and its base dependency:
+```bash
+docker compose --profile dev build enterprise-rag-indexing
+```
 Start the persistent development infrastructure:
 ```bash
 docker compose --profile dev up -d rustfs qdrant

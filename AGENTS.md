@@ -114,6 +114,11 @@ The working prototype must:
 # TECHNICAL BOUNDARIES
 - Use Python as the primary programming language.
 - Documentation framework: MkDocs, selected for its lightweight Markdown-first workflow and suitability for a small multi-repository Python prototype. Keep useful README files in each repository.
+- MkDocs documentation is mandatory for each Python project once implementation code exists. Each such project must include a working `mkdocs.yml`, a `docs/` directory, and pinned documentation dependencies separate from runtime dependencies where practical.
+- At minimum, each Python project's MkDocs site must document its current implementation status, architecture and layer boundaries, configuration/environment variables, CLI or API usage, local development and test commands, error/lifecycle behavior, and known limitations. Clearly label planned behavior; never present it as implemented.
+- Public Python modules, classes, functions, and non-trivial methods must have useful docstrings covering purpose, important arguments, return values, raised exceptions, lifecycle/cleanup requirements, and side effects where applicable. Generate an API reference from these docstrings with `mkdocstrings` or an equivalently lightweight MkDocs integration.
+- Documentation must be updated in the same change as the behavior or public contract it describes. A README should link developers to the full MkDocs site but must not replace it.
+- Treat `mkdocs build --strict` as a required documentation validation step. Do not commit generated `site/` output.
 - Use modular design and Docker/Docker Compose.
 - Use Python virtual environments created with the `virtualenv` module.
 - Each Python project must have its own `requirements.txt`; pin or constrain dependencies to reproducible compatible versions.

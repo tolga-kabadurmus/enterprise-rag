@@ -46,9 +46,69 @@ The working prototype must:
 - Do not reuse a MinIO data volume as a RustFS data volume. Migrate existing objects through the S3 API because MinIO on-disk compatibility is not assumed.
 
 ## Repository structure
+- `enterprise-rag-deployment`: Kubernetes deployment repository developed with HelmChart.
 - `enterprise-rag-indexing`: Implements the disposable, asynchronous document indexing pipeline.
 - `enterprise-rag-query`: Implements the retrieval-and-answering application; detailed design is to be defined later. The minimum end-to-end prototype must nevertheless retrieve indexed chunks, call an LLM, and return the answer with sources.
 - `enterprise-rag`: Orchestration repository containing the other repositories as Git submodules, shared deployment configuration, and `docker-compose.yaml`.
+
+## enterprise-rag-deployment
+- This is a Kubernetes/OpenShift deployment repository developed with Helm Charts.
+- Use the Helm umbrella chart pattern.
+- Helm structure must contain the following subcharts:
+  - qdrant
+  - rustfs
+  - enterprise-rag-indexing
+  - enterprise-rag-query
+
+- Every subchart:
+  - Must have its own `Chart.yaml`.
+  - Must have its own dedicated `values.yaml`, containing default configurations that rarely change.
+  - Environment-specific configurations must be overridden through the parent chart's values files.
+  - Each Kubernetes resource must have its own dedicated template file, where applicable:
+    - ConfigMap → `configmap.yaml`
+    - Secret → `secret.yaml`
+    - PersistentVolumeClaim → `pvc.yaml`
+    - Deployment → `deployment.yaml`
+    - StatefulSet → `statefulset.yaml`
+    - Service → `service.yaml`
+    - ServiceAccount → `serviceaccount.yaml`
+    - Ingress → `ingress.yaml`
+    - Job → `job.yaml`
+    - CronJob → `cronjob.yaml`
+  - Do not generate unused Kubernetes resource templates.
+  - Use `_helpers.tpl` for reusable Helm template definitions.
+
+- Kubernetes workload considerations:
+  - Qdrant and RustFS should use persistent storage.
+  - `enterprise-rag-indexing` must run as a disposable Kubernetes Job or CronJob, not as a continuously running Deployment.
+  - `enterprise-rag-query` must run as a Deployment.
+  - Configure readiness/liveness probes where appropriate.
+  - Configure CPU and memory requests/limits through Helm values.
+  - Never hardcode credentials or sensitive information into Helm templates or committed values files.
+  - Support existing Kubernetes Secrets for sensitive configuration.
+
+- Helm validation:
+  - Always validate the Helm chart structure using `helm lint`.
+  - Always validate rendered Kubernetes manifests using `helm template`.
+  - Validate rendered manifests using Kubernetes dry-run when a compatible cluster/API is available.
+  - Fix all Helm rendering errors before considering the implementation complete.
+
+umbrella Helm chart controlling the Kubernetes/OpenShift deployment of the complete stack.
+RustFS — S3-compatible object storage for source and staging documents, with persistent storage.
+Qdrant — vector storage for embeddings and source metadata, with persistent storage.
+```text
+enterprise-rag-deployment/              # Helm umbrella chart
+├── Chart.yaml
+├── values.yaml
+├── values-dev.yaml                    # Example environment overrides
+├── values-prod.yaml                   # Example environment overrides; no secrets
+└── charts/
+    ├── qdrant/                        # Persistent vector database
+    ├── rustfs/                        # Persistent S3-compatible storage
+    ├── enterprise-rag-indexing/       # On-demand Job / optional CronJob
+    └── enterprise-rag-query/          # Long-running API Deployment
+```
+Each subchart contains its own `Chart.yaml`, default `values.yaml`, and `templates/` directory. Kubernetes resources should be defined in separate, purpose-named files when needed, such as `deployment.yaml`, `statefulset.yaml`, `job.yaml`, `cronjob.yaml`, `service.yaml`, `configmap.yaml`, `secret.yaml`, `pvc.yaml`, and `ingress.yaml`. Shared template helpers belong in `_helpers.tpl`. Unused resource templates should not be created.
 
 ## enterprise-rag-indexing
 - Implement the indexing pipeline with `asyncio` and asynchronous resource cleanup.
@@ -138,6 +198,9 @@ The working prototype must:
 - Use Python as the primary programming language.
 - Documentation framework: MkDocs, selected for its lightweight Markdown-first workflow and suitability for a small multi-repository Python prototype. Keep useful README files in each repository.
 - MkDocs documentation is mandatory for each Python project once implementation code exists. Each such project must include a working `mkdocs.yml`, a `docs/` directory, and pinned documentation dependencies separate from runtime dependencies where practical.
+- At any python code;
+  - if using environment variables is needed implementing Pydantic BaseSettings class is mandatory
+  - if using is object class/data class is needed implement Pydantic Base class is mandatory
 - At minimum, each Python project's MkDocs site must document its current implementation status, architecture and layer boundaries, configuration/environment variables, CLI or API usage, local development and test commands, error/lifecycle behavior, and known limitations. Clearly label planned behavior; never present it as implemented.
 - Public Python modules, classes, functions, and non-trivial methods must have useful docstrings covering purpose, important arguments, return values, raised exceptions, lifecycle/cleanup requirements, and side effects where applicable. Generate an API reference from these docstrings with `mkdocstrings` or an equivalently lightweight MkDocs integration.
 - Documentation must be updated in the same change as the behavior or public contract it describes. A README should link developers to the full MkDocs site but must not replace it.

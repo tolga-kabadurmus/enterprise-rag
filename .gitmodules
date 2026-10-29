@@ -4,3 +4,6 @@
 [submodule "enterprise-rag-query"]
 	path = enterprise-rag-query
 	url = https://github.com/tolga-kabadurmus/enterprise-rag-query.git
+[submodule "enterprise-rag-deployment"]
+	path = enterprise-rag-deployment
+	url = https://github.com/tolga-kabadurmus/enterprise-rag-deployment.git

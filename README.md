@@ -18,8 +18,13 @@ To add the component repositories to an existing `enterprise-rag` orchestration 
 ```bash
 git submodule add https://github.com/tolga-kabadurmus/enterprise-rag-indexing.git enterprise-rag-indexing
 git submodule add https://github.com/tolga-kabadurmus/enterprise-rag-query.git enterprise-rag-query
-git add .gitmodules enterprise-rag-indexing enterprise-rag-query
+git submodule add https://github.com/tolga-kabadurmus/enterprise-rag-deployment.git enterprise-rag-deployment
+git add .gitmodules enterprise-rag-indexing enterprise-rag-query enterprise-rag-deployment
 git commit -m "Add indexing and query submodules"
+```
+Listing the submodules
+```bash
+git config --file .gitmodules --name-only --get-regexp path
 ```
 > The GitHub URLs above follow the naming convention of the earlier project. Verify that both repositories have been created under that account before executing these commands. Each repository should have at least one commit.
 To clone the orchestration repository with submodules:
@@ -40,6 +45,7 @@ To intentionally advance a submodule to newer commits, update it inside its dire
 Run the complete project
 Prerequisites: Docker Engine with the Compose v2 plugin; Git; Python 3.12.3 and `virtualenv` for host-based Python development. The primary target is Ubuntu 24.04.4 LTS.
 Clone with submodules using the command above, or update them if already cloned. Copy each file in `dev-envs/` by removing its `.example` suffix, then set RustFS credentials, S3 endpoints, Qdrant connection details, and embedding/LLM provider settings. Do not commit secrets.
+The root S3 and Qdrant diagnostic scripts load validated settings from `dev-envs/diagnostics.env` through Pydantic `BaseSettings`. Create it from `dev-envs/diagnostics.env.example`; the real file is Git-ignored.
 The current root `docker-compose.yaml` implements development services named `rustfs`, `qdrant`, `enterprise-rag-base`, and `enterprise-rag-indexing`. The indexing build consumes `enterprise-rag-base` as a service-backed build context, so Compose builds the base image before the indexing image. Its runtime dependency also starts the base service before the indexing service.
 Build the indexing image and its base dependency:
 ```bash

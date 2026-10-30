@@ -18,6 +18,7 @@ The working prototype must:
 
 # BUSINESS BOUNDARIES
 - Produce readable, straightforward code; avoid fancy, heavily abstracted, or unnecessarily polished AI-generated code.
+- Authentication (authn) and authorization (authz) are outside the scope of this project. Do not implement or present either topic as covered by this prototype.
 - Manage configuration through environment variables. Never commit credentials or secrets.
 - Include explicit error handling and structured or consistently formatted logging.
 - Account for production readiness without turning this prototype into a full production platform.

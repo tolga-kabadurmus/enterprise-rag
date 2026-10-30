@@ -147,11 +147,11 @@ services:
       - "8081"
       - app.main:app
 
-  enterprise-rag-query:
+  enterprise-rag-retrieval:
     profiles: ["dev"]
     build:
-      context: ./enterprise-rag-query
-      dockerfile: Dockerfiles/enterprise-rag-query
+      context: ./enterprise-rag-retrieval
+      dockerfile: Dockerfiles/enterprise-rag-retrieval
       additional_contexts:
         enterprise_rag_base: service:enterprise-rag-base
     depends_on:
@@ -162,11 +162,11 @@ services:
       enterprise-rag-embedding-service:
         condition: service_healthy
     env_file:
-      - ./dev-envs/enterprise-rag-query.env
+      - ./dev-envs/enterprise-rag-retrieval.env
     ports:
       - "8000:8082"
     volumes:
-      - ./enterprise-rag-query/app:/app/app
+      - ./enterprise-rag-retrieval/app:/app/app
     command:
       - granian
       - --interface

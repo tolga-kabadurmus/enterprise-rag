@@ -45,7 +45,7 @@ To intentionally advance a submodule to newer commits, update it inside its dire
 Run the complete project
 Prerequisites: Docker Engine with the Compose v2 plugin; Git; Python 3.12.3 and `virtualenv` for host-based Python development. The primary target is Ubuntu 24.04.4 LTS.
 Clone with submodules using the command above, or update them if already cloned. Copy each file in `dev-envs/` by removing its `.example` suffix, then set RustFS credentials, S3 endpoints, Qdrant connection details, and embedding/LLM provider settings. Do not commit secrets.
-The root S3 and Qdrant diagnostic scripts load validated settings from `dev-envs/diagnostics.env` through Pydantic `BaseSettings`. Create it from `dev-envs/diagnostics.env.example`; the real file is Git-ignored.
+The root S3 and Qdrant diagnostic scripts load validated settings from `dev-envs/diagnostics.env` through Pydantic `BaseSettings`. Create it from `dev-envs/diagnostics.env.example`; the real file is Git-ignored. The indexing service separately reads `dev-envs/enterprise-rag-indexing.env`, created from its safe example. Configure `EMBEDDINGS_BUCKET=models`, `EMBEDDINGS_KEY_PREFIX=embeddings`, and `EMBEDDINGS_LOCAL_DIRECTORY=/models/embeddings` to synchronize the uploaded model artifacts into its named volume before a real pipeline starts.
 The current root `docker-compose.yaml` implements development services named `rustfs`, `qdrant`, `enterprise-rag-base`, and `enterprise-rag-indexing`. The indexing build consumes `enterprise-rag-base` as a service-backed build context, so Compose builds the base image before the indexing image. Its runtime dependency also starts the base service before the indexing service.
 Build the indexing image and its base dependency:
 ```bash
@@ -64,12 +64,12 @@ Execute an on-demand indexing job (use the actual CLI flags implemented by the i
 ```bash
 docker compose --profile dev run --rm enterprise-rag-indexing \
   python -m app.main \
-  --pipeline mock-pdf \
+  --pipeline v1 \
   --source-bucket documents \
   --key-prefix contracts/2026/ \
   --concurrency 4
 ```
-The command currently runs a clearly logged mock indexing job. It validates the container, CLI, async lifecycle, bounded concurrency, deterministic IDs, and cleanup, but does not read RustFS or write Qdrant. Keep `dumb-init` as the image's PID 1 process. The command and documentation must be updated when the real PDF pipeline replaces the mock.
+The registered `v1` job synchronizes and loads the configured ONNX embedding model, discovers an exact object or all objects in the source bucket/prefix, resolves S3 metadata, and routes PDFs to `PDFChunkerV1` with bounded concurrency. `PDFChunkerV1` currently reports `not_implemented`; it does not yet extract text, create chunks, run inference, or write Qdrant points. The offline `mock-pdf` pipeline remains available for lifecycle diagnostics. Keep `dumb-init` as the image's PID 1 process.
 When the query application provides an HTTP endpoint, use the API and documentation URLs defined by the published ports in `docker-compose.yaml`. No host port or endpoint path is fixed yet.
 Stop the running services without deleting persistent data:
 ```bash

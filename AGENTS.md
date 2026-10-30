@@ -49,7 +49,14 @@ The working prototype must:
 - `enterprise-rag-deployment`: Kubernetes deployment repository developed with HelmChart.
 - `enterprise-rag-indexing`: Implements the disposable, asynchronous document indexing pipeline.
 - `enterprise-rag-query`: Implements the retrieval-and-answering application; detailed design is to be defined later. The minimum end-to-end prototype must nevertheless retrieve indexed chunks, call an LLM, and return the answer with sources.
-- `enterprise-rag`: Orchestration repository containing the other repositories as Git submodules, shared deployment configuration, and `docker-compose.yaml`.
+- `enterprise-rag`: Orchestration repository containing the other repositories as Git submodules, shared deployment configuration, and `docker-compose.yaml`. Frankly the root repository.
+- All environment variable files (*.env) must be placed on the ./dev-envs folder inside the root repository.
+- For ech sub repository a seperate environment variable file is mandatory named as ./dev-envs{{of the root repository}}/{{sub-repo-name}}.env and must be used in its own docker-compose service
+- All envvars (including S3 and qdrant) must be placed at a proper var name. For example S3_ACCESS_KEY, S3_EMBEDDINGS_ROOT_BUCKET , QDRANT_API_KEY
+- Pydantic BaseSettings class implementing is a must for all envvar sets (for example for S3_ is a seperate BaseSettings class , for QDRANT_ )
+- Inside for each repository implement ./common directory including BaseSetting class files and other utility funtions.
+  - Setting files placed in ./common/settings directory
+  - Utility files placed in ./common/utility directory
 
 ## enterprise-rag-deployment
 - This is a Kubernetes/OpenShift deployment repository developed with Helm Charts.
@@ -212,6 +219,11 @@ Each subchart contains its own `Chart.yaml`, default `values.yaml`, and `templat
 - Prefer Python standard library features where sufficient. Avoid introducing a framework when a small, readable module does the job.
 
 ## Clean Architecture conventions
+- For each python repository (for example enterprise-rag-indexing and enterprise-rag-query):
+  - all codes must be placed on the /app directory at the containr
+  - all repository classes must be placed at /app/repository directory with a hierarchical way
+  - all repository classes must be placed at /app/repository directory with a hierarchical way
+  - dockerfile must be placed at Dockerfiles repository and with the name of repository.
 - Organize implementation into the following logical layers:
   - **Repositories:** Infrastructure and external-data access adapters (S3/RustFS, Qdrant, embedding APIs, LLM APIs). Keep business logic out of repositories.
   - **Usecases:** Application business logic. Preserve the original preference of one primary repository dependency per use case; when an operation requires several repositories, coordinate multiple use cases through a controller rather than bypassing this rule silently.

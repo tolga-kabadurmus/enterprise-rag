@@ -58,6 +58,26 @@ services:
           sleep 60
         done
 
+  # Build this shared image before the child application images.
+  test:
+    profiles: ["dev", "prod"]
+    build:
+      context: .
+      dockerfile: Dockerfiles/enterprise-rag-base
+    depends_on:
+      enterprise-rag-base:
+        condition: service_started
+    volumes:
+      - ./test:/app/test
+    command:
+      - /bin/sh
+      - -c
+      - |
+        while true; do
+          echo "sleeping"
+          sleep 60
+        done
+
   enterprise-rag-indexing:
     profiles: ["dev"]
     build:
@@ -72,8 +92,11 @@ services:
         condition: service_healthy
       qdrant:
         condition: service_healthy
+    env_file:
+      - ./dev-envs/enterprise-rag-indexing.env
     volumes:
       - ./enterprise-rag-indexing/app:/app/app
+      - embedding-models:/models
     command:
       - /bin/sh
       - -c
@@ -86,3 +109,5 @@ services:
 volumes:
   rustfs-data:
   qdrant-data:
+  huggingface-downloads:
+  embedding-models:

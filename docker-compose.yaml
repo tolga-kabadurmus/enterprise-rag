@@ -97,6 +97,7 @@ services:
     volumes:
       - ./enterprise-rag-indexing/app:/app/app
       - embedding-models:/models
+      - indexing-work:/work/indexing
     command:
       - /bin/sh
       - -c
@@ -111,3 +112,4 @@ volumes:
   qdrant-data:
   huggingface-downloads:
   embedding-models:
+  indexing-work:

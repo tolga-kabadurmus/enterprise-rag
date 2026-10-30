@@ -2,14 +2,14 @@
 
 `enterprise-rag` is the top-level orchestration repository for the Enterprise RAG coding exercise. It brings the asynchronous document indexing pipeline, shared embedding API, RAG query API, RustFS object storage, and Qdrant vector database together with Docker Compose.
 
-The target prototype indexes PDF documents from S3-compatible storage, chunks them, generates embeddings, stores them in Qdrant, and uses retrieved context to answer questions with source references. PDF indexing is the initial scope; additional document formats and advanced retrieval features can be added later. The dedicated embedding service described below is an approved conceptual design and is not implemented yet.
+The target prototype indexes PDF documents from S3-compatible storage, chunks them, generates embeddings, stores them in Qdrant, and uses retrieved context to answer questions with source references. PDF indexing is the initial scope; additional document formats and advanced retrieval features can be added later. The dedicated embedding service synchronizes and loads the ONNX model from RustFS for local development, and the indexing `v1` pipeline now calls it over pooled HTTPX.
 
 For architecture, coding standards, project boundaries, and implementation guidance, see [`AGENTS.md`](AGENTS.md).
 
 ## Repositories
 
 - `enterprise-rag` — orchestrates the complete stack and tracks the component repositories as Git submodules.
-- `enterprise-rag-embedding-service` — planned FastAPI/Granian API that loads the shared embedding model once and vectorizes both document chunks and user questions.
+- `enterprise-rag-embedding-service` — FastAPI/Granian API that synchronizes and loads the shared embedding model once and vectorizes both document chunks and user questions.
 - `enterprise-rag-indexing` — provides a disposable, asynchronous indexing pipeline for documents in RustFS through its S3-compatible API.
 - `enterprise-rag-query` — provides the planned FastAPI/Granian RAG query API.
 - `enterprise-rag-deployment` — provides the Helm umbrella chart and component subcharts for Kubernetes/OpenShift.
@@ -99,9 +99,9 @@ git submodule update --init --recursive
 To intentionally advance a submodule to newer commits, update it inside its directory, then commit the changed submodule pointer from the parent repository. `git submodule update --remote` is another option when a tracking branch is configured; it should not be confused with checking out the parent repository's pinned versions.
 ## Run the complete project
 Prerequisites: Docker Engine with the Compose v2 plugin; Git; Python 3.12.3 and `virtualenv` for host-based Python development. The primary target is Ubuntu 24.04.4 LTS.
-Clone with submodules using the command above, or update them if already cloned. Copy each file in `dev-envs/` by removing its `.example` suffix, then set RustFS credentials, S3 endpoints, Qdrant connection details, and embedding/LLM provider settings. Each application has its own root-level environment file, including the planned `dev-envs/enterprise-rag-embedding-service.env`. Only safe `.env.example` templates belong in Git; do not commit real environment files or secrets.
-The root S3 and Qdrant diagnostic scripts load validated settings from `dev-envs/diagnostics.env` through Pydantic `BaseSettings`. Create it from `dev-envs/diagnostics.env.example`; the real file is Git-ignored. The indexing service separately reads `dev-envs/enterprise-rag-indexing.env`, created from its safe example. Configure `EMBEDDINGS_BUCKET=models`, `EMBEDDINGS_KEY_PREFIX=embeddings`, and `EMBEDDINGS_LOCAL_DIRECTORY=/models/embeddings` to synchronize the uploaded model artifacts into its named volume before a real pipeline starts. `S3_PROCESSING_BUCKET=documents-processing` stores claimed in-progress documents, while `INDEXING_WORK_DIRECTORY=/work/indexing` points at the temporary `indexing-work` volume.
-The current root `docker-compose.yaml` implements development services named `rustfs`, `qdrant`, `enterprise-rag-base`, and `enterprise-rag-indexing`. The embedding and query services shown in the diagrams are not Compose services yet. The indexing build consumes `enterprise-rag-base` as a service-backed build context, so Compose builds the base image before the indexing image. Its runtime dependency also starts the base service before the indexing service. The `indexing-work` volume is temporary scratch space; Kubernetes Jobs/CronJobs should use an `emptyDir` at the same mount path. Durable processing objects remain in RustFS.
+Clone with submodules using the command above, or update them if already cloned. Copy each file in `dev-envs/` by removing its `.example` suffix, then set RustFS credentials, S3 endpoints, Qdrant connection details, and embedding/LLM provider settings. Each application has its own root-level environment file, including `dev-envs/enterprise-rag-embedding-service.env`. Only safe `.env.example` templates belong in Git; do not commit real environment files or secrets.
+The root S3 and Qdrant diagnostic scripts load validated settings from `dev-envs/diagnostics.env` through Pydantic `BaseSettings`. Create it from `dev-envs/diagnostics.env.example`; the real file is Git-ignored. The embedding service synchronizes `s3://models/embeddings/intfloat/multilingual-e5-small/` into `/models/embedding/intfloat/multilingual-e5-small`; indexing now requests document vectors over HTTP instead of loading that model. `S3_PROCESSING_BUCKET=documents-processing` stores claimed in-progress documents, while `INDEXING_WORK_DIRECTORY=/work/indexing` points at the temporary `indexing-work` volume.
+The current root `docker-compose.yaml` implements development services named `rustfs`, `qdrant`, `enterprise-rag-base`, `enterprise-rag-indexing`, and `enterprise-rag-embedding-service`. The query service shown in the diagrams is not a Compose service yet. The indexing and embedding builds consume `enterprise-rag-base` as a service-backed build context, so Compose builds the base image before those images. Their runtime dependencies also start the base service first. The `indexing-work` volume is temporary scratch space; Kubernetes Jobs/CronJobs should use an `emptyDir` at the same mount path. Durable processing objects remain in RustFS.
 Build the indexing image and its base dependency:
 ```bash
 docker compose --profile dev build enterprise-rag-indexing
@@ -141,7 +141,7 @@ docker compose --profile dev up --build
 ```
 A local source bind mount for the indexing service is required by `AGENTS.md`; production-style builds or a `prod` profile may be added later but are not currently implemented.
 ## Documentation and scope
-`AGENTS.md` defines coding conventions, Clean Architecture layers, factory patterns, asynchronous resource lifecycle, the planned embedding service contract, and the implementation sequence.
+`AGENTS.md` defines coding conventions, Clean Architecture layers, factory patterns, asynchronous resource lifecycle, the embedding service contract, and the implementation sequence.
 MkDocs is the chosen documentation framework; project-specific READMEs remain useful for local development.
 Hybrid search, reranking, response streaming, conversation memory, multi-agent workflows, evaluations, Helm, CI/CD, and dashboards are optional follow-on features, not claims about the initial prototype.
 This README documents the intended repository and developer workflow. Keep it synchronized with the actual Docker Compose service names, environment templates, entrypoints, API paths, and host ports as implementation proceeds.

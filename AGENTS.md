@@ -47,7 +47,7 @@ The working prototype must:
 
 ## Repository structure
 - `enterprise-rag-deployment`: Kubernetes deployment repository developed with HelmChart.
-- `enterprise-rag-embedding-service`: Planned dedicated FastAPI service that loads the shared embedding model once and produces compatible document and query vectors for the indexing and query components.
+- `enterprise-rag-embedding-service`: Dedicated FastAPI service that loads the shared embedding model once and produces compatible document and query vectors; indexing consumes it now and query integration remains planned.
 - `enterprise-rag-indexing`: Implements the disposable, asynchronous document indexing pipeline.
 - `enterprise-rag-query`: Implements the retrieval-and-answering application; detailed design is to be defined later. The minimum end-to-end prototype must nevertheless retrieve indexed chunks, call an LLM, and return the answer with sources.
 - `enterprise-rag`: Orchestration repository containing the other repositories as Git submodules, shared deployment configuration, and `docker-compose.yaml`. Frankly the root repository.
@@ -121,8 +121,8 @@ enterprise-rag-deployment/              # Helm umbrella chart
 ```
 Each subchart contains its own `Chart.yaml`, default `values.yaml`, and `templates/` directory. Kubernetes resources should be defined in separate, purpose-named files when needed, such as `deployment.yaml`, `statefulset.yaml`, `job.yaml`, `cronjob.yaml`, `service.yaml`, `configmap.yaml`, `secret.yaml`, `pvc.yaml`, and `ingress.yaml`. Shared template helpers belong in `_helpers.tpl`. Unused resource templates should not be created.
 
-## PLANNED: enterprise-rag-embedding-service
-- Status: approved conceptual design; do not describe the service as implemented until its application code and tests exist.
+## enterprise-rag-embedding-service
+- Status: FastAPI/Granian model-vectorization service implemented for local development; indexing now consumes its HTTP contract, while query migration and Kubernetes deployment remain planned.
 - Implement it as a dedicated long-running FastAPI application served by Granian.
 - Its only business responsibility is embedding vectorization. It accepts document chunks from `enterprise-rag-indexing` and user questions from `enterprise-rag-query`, then returns vectors produced by the same configured model and revision.
 - Keep the request intent explicit so the service can apply model-specific document and query preparation consistently. For `intfloat/multilingual-e5-small`, document inputs use the `passage:` prefix and query inputs use the `query:` prefix.
@@ -157,7 +157,7 @@ Each subchart contains its own `Chart.yaml`, default `values.yaml`, and `templat
 - Start with PDF indexing, while allowing more document content types to be supported later.
 - Implement `DocumentIndexerFactory` to select the appropriate document indexer based on a validated content type (for example, `application/pdf`). Do not confuse this factory with infrastructure `RepositoryFactory`.
 - Keep document extraction, chunking, embedding, and vector persistence as separate responsibilities.
-- Obtain document embeddings through the versioned `enterprise-rag-embedding-service` API once that service is implemented. Keep its asynchronous HTTP client behind an embedding repository contract; the indexing job must not load its own model after that migration is complete.
+- Obtain document embeddings through the versioned `enterprise-rag-embedding-service` API. Keep its asynchronous HTTP client behind an embedding repository contract; the indexing job must not load its own model in the normal composition. The previous local vectorizer remains only as an inactive compatibility path until separately removed.
 - Preserve document identity and source metadata so retrieved chunks can cite their origin. Store at least source bucket, object key, document identifier, chunk identifier, and page number where available.
 - Dockerfile entrypoint must use `dumb-init` for signal forwarding and process cleanup.
 - Read S3 endpoint, access key, secret key, and other credentials/configuration from environment variables; keep local values in a separate, Git-ignored `.env` file, and provide a safe `.env.example`.

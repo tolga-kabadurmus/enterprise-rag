@@ -92,6 +92,8 @@ services:
         condition: service_healthy
       qdrant:
         condition: service_healthy
+      enterprise-rag-embedding-service:
+        condition: service_healthy
     env_file:
       - ./dev-envs/enterprise-rag-indexing.env
     volumes:
@@ -106,6 +108,44 @@ services:
           echo "sleeping"
           sleep 5
         done
+
+  enterprise-rag-embedding-service:
+    profiles: ["dev"]
+    build:
+      context: ./enterprise-rag-embedding-service
+      dockerfile: Dockerfiles/enterprise-rag-embedding-service
+      additional_contexts:
+        enterprise_rag_base: service:enterprise-rag-base
+    depends_on:
+      enterprise-rag-base:
+        condition: service_started
+      rustfs:
+        condition: service_healthy
+    env_file:
+      - ./dev-envs/enterprise-rag-embedding-service.env
+    ports:
+      - "8081:8081"
+    volumes:
+      - ./enterprise-rag-embedding-service/app:/app/app
+      - embedding-models:/models
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8081/health/ready')"
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    command:
+      - granian
+      - --interface
+      - asgi
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8081"
+      - app.main:app
 
 volumes:
   rustfs-data:

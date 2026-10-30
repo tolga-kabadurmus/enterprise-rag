@@ -47,6 +47,7 @@ The working prototype must:
 
 ## Repository structure
 - `enterprise-rag-deployment`: Kubernetes deployment repository developed with HelmChart.
+- `enterprise-rag-embedding-service`: Planned dedicated FastAPI service that loads the shared embedding model once and produces compatible document and query vectors for the indexing and query components.
 - `enterprise-rag-indexing`: Implements the disposable, asynchronous document indexing pipeline.
 - `enterprise-rag-query`: Implements the retrieval-and-answering application; detailed design is to be defined later. The minimum end-to-end prototype must nevertheless retrieve indexed chunks, call an LLM, and return the answer with sources.
 - `enterprise-rag`: Orchestration repository containing the other repositories as Git submodules, shared deployment configuration, and `docker-compose.yaml`. Frankly the root repository.
@@ -64,6 +65,7 @@ The working prototype must:
 - Helm structure must contain the following subcharts:
   - qdrant
   - rustfs
+  - enterprise-rag-embedding-service
   - enterprise-rag-indexing
   - enterprise-rag-query
 
@@ -87,6 +89,7 @@ The working prototype must:
 
 - Kubernetes workload considerations:
   - Qdrant and RustFS should use persistent storage.
+  - `enterprise-rag-embedding-service` must run as a long-running Deployment and expose an internal Kubernetes Service. Its readiness probe must not succeed until the embedding model is loaded.
   - `enterprise-rag-indexing` must run as a disposable Kubernetes Job or CronJob, not as a continuously running Deployment.
   - `enterprise-rag-query` must run as a Deployment.
   - Configure readiness/liveness probes where appropriate.
@@ -112,10 +115,32 @@ enterprise-rag-deployment/              # Helm umbrella chart
 └── charts/
     ├── qdrant/                        # Persistent vector database
     ├── rustfs/                        # Persistent S3-compatible storage
+    ├── enterprise-rag-embedding-service/ # Shared embedding API Deployment
     ├── enterprise-rag-indexing/       # On-demand Job / optional CronJob
     └── enterprise-rag-query/          # Long-running API Deployment
 ```
 Each subchart contains its own `Chart.yaml`, default `values.yaml`, and `templates/` directory. Kubernetes resources should be defined in separate, purpose-named files when needed, such as `deployment.yaml`, `statefulset.yaml`, `job.yaml`, `cronjob.yaml`, `service.yaml`, `configmap.yaml`, `secret.yaml`, `pvc.yaml`, and `ingress.yaml`. Shared template helpers belong in `_helpers.tpl`. Unused resource templates should not be created.
+
+## PLANNED: enterprise-rag-embedding-service
+- Status: approved conceptual design; do not describe the service as implemented until its application code and tests exist.
+- Implement it as a dedicated long-running FastAPI application served by Granian.
+- Its only business responsibility is embedding vectorization. It accepts document chunks from `enterprise-rag-indexing` and user questions from `enterprise-rag-query`, then returns vectors produced by the same configured model and revision.
+- Keep the request intent explicit so the service can apply model-specific document and query preparation consistently. For `intfloat/multilingual-e5-small`, document inputs use the `passage:` prefix and query inputs use the `query:` prefix.
+- The service owns model artifact synchronization, tokenization, inference, pooling, normalization, batching, and reporting its model identity and vector dimension.
+- The service must not own S3 document discovery, document extraction, chunking, Qdrant persistence/retrieval, prompt construction, or LLM calls.
+- Use FastAPI lifespan/startup initialization to load the embedding model exactly once per application process and store the ready runtime on `app.state`. Request handlers must reuse that state so the API can serve multiple requests without reloading the model.
+- Readiness must remain unsuccessful until startup model loading completes. Startup must fail rather than accept traffic when the configured model cannot be loaded.
+- Implement `UnhandledExceptionMiddleware` to log unexpected failures while returning a safe response that does not expose internal exceptions, paths, model inputs, credentials, or stack traces to clients.
+- Use Pydantic `BaseSettings` classes in `app/common/settings/` for model, S3-compatible model storage, API, and runtime configuration. Place reusable helpers in `app/common/utility/`.
+- Use Pydantic `BaseModel` classes for API requests, responses, vector records, model metadata, and error payloads.
+- Keep all container application code under `/app`; place repository adapters hierarchically under `/app/repository` and use constructor-based dependency injection and `RepositoryFactory` where provider selection is needed.
+- Keep the service Dockerfile at `enterprise-rag-embedding-service/Dockerfiles/enterprise-rag-embedding-service`, use `dumb-init` as PID 1, and start Granian rather than a development server.
+- Configure the Compose service with the root environment file `./dev-envs/enterprise-rag-embedding-service.env`. Commit only `./dev-envs/enterprise-rag-embedding-service.env.example`; never commit its real credentials.
+- Provide health and readiness endpoints. Health may report that the process is alive; readiness must verify that the model runtime in `app.state` is usable.
+- Bound request batch size, input length, concurrent inference, and timeouts. Do not log complete input text or returned vectors by default.
+- Define a stable versioned REST contract, initially under `/v1`, used by both indexing and query HTTP repository adapters. Return model name/revision, vector dimension, and normalization information with embeddings.
+- Test request validation, document/query preparation, deterministic inference fixtures, batching, concurrency bounds, startup failure, readiness, middleware sanitization, and cleanup. Keep live RustFS/model integration tests separate from unit tests.
+- Maintain a dedicated MkDocs site after implementation code exists and validate it using `mkdocs build --strict`.
 
 ## enterprise-rag-indexing
 - Implement the indexing pipeline with `asyncio` and asynchronous resource cleanup.
@@ -132,6 +157,7 @@ Each subchart contains its own `Chart.yaml`, default `values.yaml`, and `templat
 - Start with PDF indexing, while allowing more document content types to be supported later.
 - Implement `DocumentIndexerFactory` to select the appropriate document indexer based on a validated content type (for example, `application/pdf`). Do not confuse this factory with infrastructure `RepositoryFactory`.
 - Keep document extraction, chunking, embedding, and vector persistence as separate responsibilities.
+- Obtain document embeddings through the versioned `enterprise-rag-embedding-service` API once that service is implemented. Keep its asynchronous HTTP client behind an embedding repository contract; the indexing job must not load its own model after that migration is complete.
 - Preserve document identity and source metadata so retrieved chunks can cite their origin. Store at least source bucket, object key, document identifier, chunk identifier, and page number where available.
 - Dockerfile entrypoint must use `dumb-init` for signal forwarding and process cleanup.
 - Read S3 endpoint, access key, secret key, and other credentials/configuration from environment variables; keep local values in a separate, Git-ignored `.env` file, and provide a safe `.env.example`.
@@ -174,25 +200,28 @@ Each subchart contains its own `Chart.yaml`, default `values.yaml`, and `templat
 - Detailed internal design: to be defined later.
 - Minimum required behavior for the coding exercise:
   - Accept a user question.
-  - Generate a query embedding compatible with the indexing pipeline's embedding model and dimensions.
+  - Generate a query embedding through `enterprise-rag-embedding-service`, compatible with the indexing pipeline's document vectors and dimensions.
   - Retrieve relevant chunks from Qdrant.
   - Send the question and retrieved context to a configurable LLM provider.
   - Return an answer and source references derived from retrieved chunk metadata.
   - Include logging, configuration management, and error handling.
 - Use FastAPI for REST endpoints and Granian as the ASGI server.
   - Implement an UnhandledExceptionMiddleware in order to prevent undecessary events to end-user.
+- Keep the embedding-service HTTP client behind a repository contract. Send questions as query inputs; do not send retrieved context back for query vectorization.
 - Keep the LLM provider and model configurable; do not hard-code credentials or claim a provider selection has already been made.
 - Streaming, reranking, hybrid search, memory, and multi-agent behavior remain future enhancements unless explicitly requested.
 
 ## enterprise-rag
-- Orchestrate the complete stack, retaining `enterprise-rag-indexing` and `enterprise-rag-query` as Git submodules.
+- Orchestrate the complete stack, retaining `enterprise-rag-embedding-service`, `enterprise-rag-indexing`, `enterprise-rag-query`, and `enterprise-rag-deployment` as Git submodules.
 - Keep `docker-compose.yaml` in this orchestration repository.
 - Include:
   - Qdrant service with a named Docker volume for persistence.
   - RustFS service with a dedicated named Docker volume for persistence.
+  - `enterprise-rag-embedding-service` as a long-running internal FastAPI/Granian service with model storage, health checks, and a development source bind mount.
   - `enterprise-rag-indexing` service with a bind mount of the local source directory for fast development.
   - `enterprise-rag-query` service for the working end-to-end RAG demonstration.
 - Keep indexing as an on-demand, one-shot Compose job; do not force it to run indefinitely as a daemon.
+- Make indexing and query depend on embedding-service readiness once their embedding HTTP clients are implemented; container startup alone is not readiness.
 - Use health checks and appropriate startup dependencies where useful; readiness must be verified by the client and must not be assumed from container startup alone.
 - Document local setup, indexing invocation, querying, and teardown in the README.
 - Keep the root `README.md` concise and aligned with the orchestration repository: purpose, repository links, topology, setup, Git submodule commands, Docker Compose commands, and links to `AGENTS.md`.
@@ -249,11 +278,12 @@ Each subchart contains its own `Chart.yaml`, default `values.yaml`, and `templat
 
 ## Delivery and implementation sequence
 1. Establish repository layout, dependency installation, environment configuration, and Docker Compose infrastructure.
-2. Implement the PDF indexing path: RustFS -> extraction -> chunking -> embedding -> Qdrant, including source metadata.
-3. Implement the minimum query path: question -> query embedding -> retrieval -> LLM -> answer with citations.
-4. Add meaningful unit/integration tests, documentation, logging, and error handling.
-5. Verify the complete end-to-end prototype locally before adding optional enhancements.
-6. Implement bonus features incrementally only when explicitly prioritized.
+2. Implement the shared embedding service and its compatible document/query vectorization contract.
+3. Implement the PDF indexing path: RustFS -> extraction -> chunking -> embedding service -> Qdrant, including source metadata.
+4. Implement the minimum query path: question -> embedding service -> retrieval -> LLM -> answer with citations.
+5. Add meaningful unit/integration tests, documentation, logging, and error handling.
+6. Verify the complete end-to-end prototype locally before adding optional enhancements.
+7. Implement bonus features incrementally only when explicitly prioritized.
 
 ## Rules for coding agents
 - Follow the repository boundaries and coding conventions above; keep changes small and readable.

@@ -1,9 +1,9 @@
 [submodule "enterprise-rag-indexing"]
 	path = enterprise-rag-indexing
 	url = https://github.com/tolga-kabadurmus/enterprise-rag-indexing.git
-[submodule "enterprise-rag-query"]
-	path = enterprise-rag-query
-	url = https://github.com/tolga-kabadurmus/enterprise-rag-query.git
+[submodule "enterprise-rag-retrieval"]
+	path = enterprise-rag-retrieval
+	url = https://github.com/tolga-kabadurmus/enterprise-rag-retrieval.git
 [submodule "enterprise-rag-deployment"]
 	path = enterprise-rag-deployment
 	url = https://github.com/tolga-kabadurmus/enterprise-rag-deployment.git

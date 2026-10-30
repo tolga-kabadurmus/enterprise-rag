@@ -80,7 +80,6 @@ The working prototype must:
     - Deployment → `deployment.yaml`
     - StatefulSet → `statefulset.yaml`
     - Service → `service.yaml`
-    - ServiceAccount → `serviceaccount.yaml`
     - Ingress → `ingress.yaml`
     - Job → `job.yaml`
     - CronJob → `cronjob.yaml`
@@ -89,9 +88,13 @@ The working prototype must:
 
 - Kubernetes workload considerations:
   - Qdrant and RustFS should use persistent storage.
-  - `enterprise-rag-embedding-service` must run as a long-running Deployment and expose an internal Kubernetes Service. Its readiness probe must not succeed until the embedding model is loaded.
+  - Do not create ServiceAccount templates; workloads use the Kubernetes default ServiceAccount.
+  - Do not set runtime user IDs or group IDs. Configure pod security settings to remain compatible with OpenShift-assigned UID/GID values.
+  - `enterprise-rag-embedding-service` must run as a long-running FastAPI/Granian Deployment and expose an internal Kubernetes Service. Its readiness probe must not succeed until the embedding model is loaded.
+  - `enterprise-rag-indexing` must run as a disposable CronJob or Job, with the default command `python -m app.main --pipeline v1 --concurrency 4`; environment-specific values may override the command.
   - `enterprise-rag-indexing` must run as a disposable Kubernetes Job or CronJob, not as a continuously running Deployment.
   - `enterprise-rag-query` must run as a Deployment.
+  - `enterprise-rag-query` is a FastAPI/Granian Deployment with an internal Service and optional standard Kubernetes Ingress. Do not require an NGINX-specific controller or annotations.
   - Configure readiness/liveness probes where appropriate.
   - Configure CPU and memory requests/limits through Helm values.
   - Never hardcode credentials or sensitive information into Helm templates or committed values files.
@@ -110,8 +113,10 @@ Qdrant — vector storage for embeddings and source metadata, with persistent st
 enterprise-rag-deployment/              # Helm umbrella chart
 ├── Chart.yaml
 ├── values.yaml
-├── values-dev.yaml                    # Example environment overrides
-├── values-prod.yaml                   # Example environment overrides; no secrets
+├── values-dev.yaml                    # Development endpoint and runtime overrides
+├── values-int.yaml                    # Integration endpoint and runtime overrides
+├── values.uat.yaml                    # UAT endpoint and runtime overrides
+├── values-prod.yaml                   # Production endpoint and runtime overrides; no secrets
 └── charts/
     ├── qdrant/                        # Persistent vector database
     ├── rustfs/                        # Persistent S3-compatible storage
@@ -119,7 +124,12 @@ enterprise-rag-deployment/              # Helm umbrella chart
     ├── enterprise-rag-indexing/       # On-demand Job / optional CronJob
     └── enterprise-rag-query/          # Long-running API Deployment
 ```
-Each subchart contains its own `Chart.yaml`, default `values.yaml`, and `templates/` directory. Kubernetes resources should be defined in separate, purpose-named files when needed, such as `deployment.yaml`, `statefulset.yaml`, `job.yaml`, `cronjob.yaml`, `service.yaml`, `configmap.yaml`, `secret.yaml`, `pvc.yaml`, and `ingress.yaml`. Shared template helpers belong in `_helpers.tpl`. Unused resource templates should not be created.
+Default application image names are `enterprise-rag-query`, `enterprise-rag-enterprise-rag-indexing`, and `enterprise-rag-embedding-service`; every image name and tag remains configurable through values files.
+Each subchart contains its own `Chart.yaml`, default `values.yaml`, and `templates/` directory. Kubernetes resources should be defined in separate, purpose-named files when needed, such as `deployment.yaml`, `statefulset.yaml`, `job.yaml`, `cronjob.yaml`, `service.yaml`, `configmap.yaml`, `secret.yaml`, `pvc.yaml`, and `ingress.yaml`. Shared template helpers belong in `_helpers.tpl`. Unused resource templates should not be created. Do not create ServiceAccount templates; use the cluster default ServiceAccount.
+
+The parent chart must provide `values-dev.yaml`, `values-int.yaml`, `values.uat.yaml`, and `values-prod.yaml`. Service endpoints, image references, commands, schedules, storage, and resource settings must be configurable through these files. Secret values must not be committed. Each `secret.yaml` must contain the comment `to be implemented by an enterprise vault` and support references to an existing Secret where appropriate. Match each secret-bearing `.env` file to its owning Helm subchart rather than sharing unrelated credentials across charts.
+
+The indexing CronJob or Job must default to `python -m app.main --pipeline v1 --concurrency 4`, with command and arguments overridable through each environment values file. The embedding service remains a long-running FastAPI/Granian Deployment. Use ephemeral volumes for S3 staging and download paths; do not use PVCs for disposable staging data. PVCs for RustFS and Qdrant must omit a custom storage class (using the cluster default) and use `ReadWriteOnce`. The embedding service and query API Deployments must each have an HPA targeting both CPU and memory at `150` percent of requested resources. Rendered deployment manifests must be cross-checked against `docker-compose.yaml` after `helm template`, including images, ports, commands, dependencies, health checks, volumes, and environment names.
 
 ## enterprise-rag-embedding-service
 - Status: FastAPI/Granian model-vectorization service implemented for local development; indexing now consumes its HTTP contract, while query migration and Kubernetes deployment remain planned.
@@ -133,7 +143,7 @@ Each subchart contains its own `Chart.yaml`, default `values.yaml`, and `templat
 - Implement `UnhandledExceptionMiddleware` to log unexpected failures while returning a safe response that does not expose internal exceptions, paths, model inputs, credentials, or stack traces to clients.
 - Use Pydantic `BaseSettings` classes in `app/common/settings/` for model, S3-compatible model storage, API, and runtime configuration. Place reusable helpers in `app/common/utility/`.
 - Use Pydantic `BaseModel` classes for API requests, responses, vector records, model metadata, and error payloads.
-- Keep all container application code under `/app`; place repository adapters hierarchically under `/app/repository` and use constructor-based dependency injection and `RepositoryFactory` where provider selection is needed.
+- Keep all container application code under `/app`; place repository adapters hierarchically under `/app/repository` and use constructor-based dependency injection and the dedicated capability-specific repository factory where provider selection is needed.
 - Keep the service Dockerfile at `enterprise-rag-embedding-service/Dockerfiles/enterprise-rag-embedding-service`, use `dumb-init` as PID 1, and start Granian rather than a development server.
 - Configure the Compose service with the root environment file `./dev-envs/enterprise-rag-embedding-service.env`. Commit only `./dev-envs/enterprise-rag-embedding-service.env.example`; never commit its real credentials.
 - Provide health and readiness endpoints. Health may report that the process is alive; readiness must verify that the model runtime in `app.state` is usable.
@@ -155,7 +165,7 @@ Each subchart contains its own `Chart.yaml`, default `values.yaml`, and `templat
 
 - The indexing process is a one-shot job: execute the requested indexing work, report success/failure, release resources, and exit. It is not a permanently running worker.
 - Start with PDF indexing, while allowing more document content types to be supported later.
-- Implement `DocumentIndexerFactory` to select the appropriate document indexer based on a validated content type (for example, `application/pdf`). Do not confuse this factory with infrastructure `RepositoryFactory`.
+- Implement `DocumentIndexerFactory` to select the appropriate document indexer based on a validated content type (for example, `application/pdf`). Do not confuse this factory with capability-specific infrastructure factories such as `StorageRepositoryFactory` or `VectorRepositoryFactory`.
 - Keep document extraction, chunking, embedding, and vector persistence as separate responsibilities.
 - Obtain document embeddings through the versioned `enterprise-rag-embedding-service` API. Keep its asynchronous HTTP client behind an embedding repository contract; the indexing job must not load its own model in the normal composition. The previous local vectorizer remains only as an inactive compatibility path until separately removed.
 - Preserve document identity and source metadata so retrieved chunks can cite their origin. Store at least source bucket, object key, document identifier, chunk identifier, and page number where available.
@@ -179,7 +189,7 @@ Each subchart contains its own `Chart.yaml`, default `values.yaml`, and `templat
 - Keep the three selection responsibilities distinct:
   - The pipeline registry selects the versioned top-level `AsyncIndexingJob` (`v1`, later `v2`).
   - `DocumentIndexerFactory` selects PDF, Word, HTML, or another document indexer from a normalized content type.
-  - Infrastructure `RepositoryFactory` creates S3, Qdrant, embedding, and other external-service repositories; it must not select document processors by content type.
+  - Capability-specific infrastructure repository factories select providers for their own contracts; for example, `StorageRepositoryFactory` selects S3/Ceph/NFS adapters and `VectorRepositoryFactory` selects Qdrant/Milvus adapters. They must not select document processors by content type.
 - Implement the S3 repository before the document processors. Define shared repository contracts and object metadata models containing at least bucket, key, size, ETag, content type, and last-modified time.
 - Implement a RustFS-compatible S3 repository with `boto3`. Read endpoint, credentials, region, addressing style, and TLS verification from validated environment configuration. Do not log credentials.
 - Keep the indexing application asynchronous. Since `boto3` is blocking, execute its calls through a bounded `asyncio.to_thread()` boundary and close its client during asynchronous job cleanup.
@@ -258,8 +268,13 @@ Each subchart contains its own `Chart.yaml`, default `values.yaml`, and `templat
   - **Usecases:** Application business logic. Preserve the original preference of one primary repository dependency per use case; when an operation requires several repositories, coordinate multiple use cases through a controller rather than bypassing this rule silently.
   - **Controllers:** Orchestrate multiple use cases when an operation is too complex for a single use case. Do not add controllers that only pass through a single call without value.
   - **REST API:** Follow REST principles. Each FastAPI endpoint invokes one use case or one controller.
-- Instantiate infrastructure repository implementations through `RepositoryFactory` to support different providers. Keep provider selection separate from document content-type selection in `DocumentIndexerFactory`.
-- Repository classes must inherit from a shared repository base or implement a shared repository interface/abstract base class.
+- Every external connection capability must have its own dedicated base contract and registry-based factory. Do not create a catch-all `RepositoryFactory` with technology-specific methods such as `create_s3()`, `create_qdrant()`, or `create_embedding_service()`.
+- Name factories and base contracts by capability, not by provider technology. Examples include `StorageRepositoryFactory` / `StorageRepositoryBase`, `VectorRepositoryFactory` / `VectorRepositoryBase`, `EmbeddingRepositoryFactory` / `EmbeddingRepositoryBase`, and `LLMRepositoryFactory` / `LLMRepositoryBase`.
+- Each capability factory must expose explicit registration methods. Define provider keys as capability-specific `str, Enum` members; never scatter raw registration strings such as `"qdrant"` through composition code. Application composition selects the validated provider enum; callers must not branch directly on Qdrant, Milvus, S3, Ceph, NFS, or another implementation.
+- Every provider implementation must inherit its capability base. For example, `S3Repository`, `RedhatCephFSS3Repository`, and `NFSRepository` inherit `StorageRepositoryBase`; Qdrant and Milvus implementations inherit `VectorRepositoryBase`.
+- Keep a capability's base class, factory class, and all its provider implementations together in the same capability directory under `/app/repository` (for example, `/app/repository/storage/`). Do not scatter one capability's factory and implementations across unrelated locations.
+- Register every supported implementation with its capability factory in the application composition/startup layer. Factories select implementations only; they must not contain provider business logic or instantiate unrelated repository capabilities.
+- Keep infrastructure provider selection separate from document content-type selection in `DocumentIndexerFactory`.
 - Use case classes must inherit from a shared use case base or implement an agreed abstract base contract. Keep base classes small and purposeful.
 - Use constructor-based dependency injection:
 

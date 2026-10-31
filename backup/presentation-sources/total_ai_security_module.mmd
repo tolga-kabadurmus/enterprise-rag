@@ -1,0 +1,48 @@
+flowchart LR
+    USERS["Employees / Enterprise Applications"]
+    UNAPPROVED["Unapproved External AI Services"]
+    GW["AI Gateway"]
+    MLOPS["MLOps"]
+    ENTERPRISE["Enterprise Systems / AI Applications"]
+
+    subgraph TRACING["Hard Artifacts - Monitoring and Tracing"]
+        GRAFANA["Time Series<br/>Tracing/Observability"]
+        KIBANA["Log Tracing"]
+        TRACING_AUDIT["Audit Logs"]
+    end
+
+    subgraph SECURITY["Total AI Security Framework"]
+        direction TB
+        SHADOW["Shadow AI Detection"]
+        DLP["DLP"]
+        PII["PII"]
+        GUARD["Guardrail"]
+        MONITOR["Continuous GenAI Inference Monitoring"]
+        RED["AI Red Teaming"]
+        RED_TEST["Test security bypasses / Harmful outputs<br/>Data leakage / Guardrail effectiveness<br/>Manual or automated tests"]
+        PENTEST["AI-Assisted Penetration Testing"]
+    end
+
+    USERS -->|unauthorized AI use| UNAPPROVED
+    SHADOW -.->|detect unauthorized usage| UNAPPROVED
+
+    GW <-->|inspect / block requests| DLP
+    GW <-->|mask / restore sensitive values| PII
+    GW -->|pre-inference checks| GUARD
+    GW -.-> |trace and observability| TRACING
+    TRACING -.-> |monitor activity| MONITOR
+
+    MLOPS -.->|versioned prompts| GUARD
+
+    RED --> RED_TEST
+    PENTEST -.->|authorized security testing| ENTERPRISE
+
+    classDef security fill:#fff7e6,stroke:#c9973a,stroke-width:2px,color:#604400
+    classDef central fill:#e5eefc,stroke:#245a9b,stroke-width:2px,color:#102a43
+    classDef normal fill:#f7fafc,stroke:#718096,color:#102a43
+    classDef application fill:#e8f4e8,stroke:#38834a,stroke-width:2px,color:#20532c
+    class SHADOW,DLP,PII,GUARD,MONITOR,RED,RED_TEST,PENTEST security
+    class GW,MLOPS central
+    class USERS,UNAPPROVED normal
+    class ENTERPRISE application
+    style SECURITY fill:#fffaf0,stroke:#c9973a,stroke-width:2px

@@ -1,0 +1,66 @@
+flowchart LR
+    subgraph SOURCES["AI Cost and Consumption Sources"]
+        direction TB
+        ML["Traditional ML Pipelines<br/>Training / Batch / Prediction"]
+        GW["AI Gateway<br/>On-Prem / Cloud Token Usage"]
+        PLAY["AI Playground<br/>JupyterHub / Google Colab<br/>CPU / Memory / GPU Usage"]
+        INFRA["Enterprise Infrastructure<br/>Hardware / GPU / Storage / Operations"]
+        OTHER["Other AI Costs<br/>Labor / AI Artifacts / Development"]
+    end
+
+    subgraph FINOPS["Cost Management - FinOps Module"]
+        direction TB
+        ML_COST["Traditional ML Cost"]
+        GENAI_COST["GenAI Inference Cost<br/>On-Prem / Cloud"]
+        DEV_COST["AI Development Cost"]
+        TCO["Total Cost of Ownership<br/>(TCO)"]
+        NCU["Tokenomics / NCU<br/>Normalized Inference Consumption"]
+        TCA["Total Cost of AI<br/>(TCA)"]
+        ALLOCATION["Cost Allocation<br/>User / Application / Agent"]
+        DASHBOARD["Self-Service Cost and<br/>Consumption Dashboard"]
+    end
+
+    subgraph CONSUMERS["Enterprise Cost Transparency"]
+        direction TB
+        USERS["End Users"]
+        APPS["Application Owners"]
+        AGENTS["Agent Owners"]
+        FIN_TEAM["FinOps / Enterprise Management"]
+    end
+
+    ML -->|pipeline resource usage| ML_COST
+    GW -->|token and model usage| GENAI_COST
+    GW -->|token consumption telemetry| NCU
+    PLAY -->|development resource usage| DEV_COST
+    INFRA -->|infrastructure cost| TCO
+    OTHER -->|labor and artifact costs| TCA
+
+    GENAI_COST --> ALLOCATION
+    ML_COST --> ALLOCATION
+    DEV_COST --> ALLOCATION
+    TCO -->|cost basis| TCA
+    NCU -->|normalized consumption| ALLOCATION
+    TCA -->|total AI cost| ALLOCATION
+
+    ALLOCATION --> DASHBOARD
+
+    DASHBOARD -.->|own usage and cost| USERS
+    DASHBOARD -.->|application costs| APPS
+    DASHBOARD -.->|agent costs| AGENTS
+    DASHBOARD -.->|enterprise cost reports| FIN_TEAM
+
+    classDef central fill:#e5eefc,stroke:#245a9b,stroke-width:2px,color:#102a43
+    classDef normal fill:#f7fafc,stroke:#718096,color:#102a43
+    classDef application fill:#e8f4e8,stroke:#38834a,stroke-width:2px,color:#20532c
+    classDef ext fill:#f3e9fc,stroke:#8854b0,stroke-width:2px,color:#542b79
+    classDef cost fill:#fff1d6,stroke:#c58a22,stroke-width:2px,color:#805600
+
+    class ML,GW,PLAY,INFRA,OTHER normal
+    class ML_COST,GENAI_COST,DEV_COST,TCO,NCU,TCA cost
+    class ALLOCATION,DASHBOARD central
+    class USERS,APPS,AGENTS application
+    class FIN_TEAM ext
+
+    style SOURCES fill:#f7fafc,stroke:#718096,stroke-width:2px
+    style FINOPS fill:#f0f5ff,stroke:#245a9b,stroke-width:2px
+    style CONSUMERS fill:#e8f4e8,stroke:#38834a,stroke-width:2px

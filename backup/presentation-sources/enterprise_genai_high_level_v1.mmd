@@ -1,0 +1,68 @@
+flowchart TB
+    EXT[External Model Download Module]
+    USERS[Users / Developers]
+    PLAY[AI Playground<br/>JupyterHub / Google Colab]
+    APPLICATION[Enterprise / 3rd Party<br/>Applications]
+    CORE_SERVICES[Enterprise Core Services]
+    RAG[Enterprise RAG Framework]
+
+    subgraph MLOPS["MLOps Platform"]
+        REG[Model Registry Module]
+        AGENT_REG[Agent Registry Module]
+    end
+
+    subgraph SERVING["Model Serving Platform"]
+        GEN[GenAI Model Serving]
+        TRAD[Traditional Model Serving]
+    end
+
+    GW[AI Gateway]
+    AGENT[Agentic Framework]
+    MCP[MCP Gateway]
+
+    USERS --> PLAY
+    PLAY -->|register / manage models| REG
+    EXT -->|scan / register models| REG
+
+    REG -->|deploy models| GEN
+    REG -->|deploy models| TRAD
+
+    PLAY -->|consume AI services| GW
+    AGENT -->|consume AI services| GW
+    APPLICATION -->|consume AI services| GW
+
+    GW -->|route inference requests| GEN
+    GW -->|route inference requests| TRAD
+
+    AGENT <-->|tool / protocol integration| MCP
+    MLOPS -.->|governance / lifecycle| GW
+
+    MCP -->|REST API / SOAP XML| CORE_SERVICES
+
+    APPLICATION -->|consume document-context services| RAG
+    PLAY -->|consume document-context services| RAG
+    AGENT -->|consume document-context services| RAG
+
+    subgraph AUX["AUX Frameworks"]
+        SECURITY[Total AI Security Framework]
+        EVAL[LLMOps / MLOps: Evaluation, Benchmarking, A/B Test, Canary Deployment]
+        COPILOT[Internal Copilots]
+        MULTI[Future Multimodal Capabilities]
+    end
+
+    classDef central fill:#e5eefc,stroke:#245a9b,stroke-width:2px,color:#102a43
+    classDef normal fill:#f7fafc,stroke:#718096,color:#102a43
+    classDef application fill:#e8f4e8,stroke:#38834a,stroke-width:2px,color:#20532c
+    classDef core fill:#f3e9fc,stroke:#8854b0,stroke-width:2px,color:#542b79
+    classDef rag fill:#fff1d6,stroke:#c58a22,stroke-width:2px,color:#805600
+    classDef aux fill:#fff7e6,stroke:#c9973a,color:#604400
+
+    class REG,GW central
+    class EXT,USERS,PLAY,GEN,TRAD,AGENT,MCP normal
+    class APPLICATION application
+    class CORE_SERVICES core
+    class RAG rag
+    class SECURITY,EVAL,COPILOT,MULTI aux
+
+    style MLOPS fill:#f0f5ff,stroke:#245a9b,stroke-width:2px
+    style SERVING fill:#f7fafc,stroke:#718096,stroke-width:2px

@@ -1,0 +1,185 @@
+name: enterprise-rag
+
+services:
+  rustfs:
+    image: rustfs/rustfs:1.0.4-glibc
+    profiles: ["dev"]
+    command: ["/data"]
+    env_file:
+      - ./dev-envs/rustfs.env
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - rustfs-data:/data
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:9000/health/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    # restart: unless-stopped
+
+  qdrant:
+    image: qdrant/qdrant:v1.20.0
+    profiles: ["dev"]
+    env_file:
+      - ./dev-envs/qdrant.env
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - qdrant-data:/qdrant/storage
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          bash -c ':> /dev/tcp/127.0.0.1/6333'
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    # restart: unless-stopped
+
+  # Build this shared image before the child application images.
+  enterprise-rag-base:
+    profiles: ["dev", "prod"]
+    build:
+      context: .
+      dockerfile: Dockerfiles/enterprise-rag-base
+    command:
+      - /bin/sh
+      - -c
+      - |
+        while true; do
+          echo "sleeping"
+          sleep 60
+        done
+
+  # Build this shared image before the child application images.
+  test:
+    profiles: ["dev", "prod"]
+    build:
+      context: .
+      dockerfile: Dockerfiles/enterprise-rag-base
+    depends_on:
+      enterprise-rag-base:
+        condition: service_started
+    volumes:
+      - ./test:/app/test
+    command:
+      - /bin/sh
+      - -c
+      - |
+        while true; do
+          echo "sleeping"
+          sleep 60
+        done
+
+  enterprise-rag-indexing:
+    profiles: ["dev"]
+    build:
+      context: ./enterprise-rag-indexing
+      dockerfile: Dockerfiles/enterprise-rag-indexing
+      additional_contexts:
+        enterprise_rag_base: service:enterprise-rag-base
+    depends_on:
+      enterprise-rag-base:
+        condition: service_started
+      rustfs:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+      enterprise-rag-embedding-service:
+        condition: service_healthy
+    env_file:
+      - ./dev-envs/enterprise-rag-indexing.env
+    volumes:
+      - ./enterprise-rag-indexing/app:/app/app
+      - embedding-models:/models
+      - indexing-work:/work/indexing
+    command:
+      - /bin/sh
+      - -c
+      - |
+        while true; do
+          echo "sleeping"
+          sleep 5
+        done
+
+  enterprise-rag-embedding-service:
+    profiles: ["dev"]
+    build:
+      context: ./enterprise-rag-embedding-service
+      dockerfile: Dockerfiles/enterprise-rag-embedding-service
+      additional_contexts:
+        enterprise_rag_base: service:enterprise-rag-base
+    depends_on:
+      enterprise-rag-base:
+        condition: service_started
+      rustfs:
+        condition: service_healthy
+    env_file:
+      - ./dev-envs/enterprise-rag-embedding-service.env
+    ports:
+      - "8081:8081"
+    volumes:
+      - ./enterprise-rag-embedding-service/app:/app/app
+      - embedding-models:/models
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8081/health/ready')"
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    command:
+      - granian
+      - --interface
+      - asgi
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8081"
+      - app.main:app
+
+  enterprise-rag-retrieval:
+    profiles: ["dev"]
+    build:
+      context: ./enterprise-rag-retrieval
+      dockerfile: Dockerfiles/enterprise-rag-retrieval
+      additional_contexts:
+        enterprise_rag_base: service:enterprise-rag-base
+    depends_on:
+      enterprise-rag-base:
+        condition: service_started
+      qdrant:
+        condition: service_healthy
+      enterprise-rag-embedding-service:
+        condition: service_healthy
+    env_file:
+      - ./dev-envs/enterprise-rag-retrieval.env
+    ports:
+      - "8000:8082"
+    volumes:
+      - ./enterprise-rag-retrieval/app:/app/app
+    command:
+      - granian
+      - --interface
+      - asgi
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8082"
+      - app.main:app
+
+volumes:
+  rustfs-data:
+  qdrant-data:
+  huggingface-downloads:
+  embedding-models:
+  indexing-work:

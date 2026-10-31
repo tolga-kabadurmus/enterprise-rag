@@ -1,0 +1,91 @@
+flowchart LR
+    subgraph TRACING["Hard Artifacts - Monitoring and Tracing"]
+        GRAFANA["Time Series<br/>Tracing/Observability"]
+        KIBANA["Log Tracing"]
+        TRACING_AUDIT["Audit Logs"]
+    end
+
+    APPLICATION["Enterprise / 3rd Party<br/>Applications"]
+    EXT["External Model Download Module"]
+
+    subgraph ML_SOURCE["ML Model Training / 3rd Party ML Models"]
+        ML_TRAIN["ML Model Training"]
+        ML_THIRD["3rd Party ML Models"]
+    end
+
+    subgraph MLOPS["MLOps / GenAI Ops Platform"]
+        direction TB
+        REG["Model Registry"]
+        AGENT_REG[Agent Registry Module]
+        SCAN["Security / Vulnerability Scanning"]
+        DRIFT["Drift Detection"]
+        AUDIT["Auditing"]
+        PROMPT["Prompt Registry and Versioning"]
+    end
+
+    subgraph SERVING["Model Serving Module"]
+        direction TB
+        GEN["GenAI Model Serving"]
+        TRAD["Traditional Model Serving"]
+        VLLM["vLLM"]
+        TRITON["NVIDIA Triton Inference Server"]
+        FASTAPI["FastAPI / Python Serving"]
+        GPU_SELECT["GPU Selection<br/>Based on Model / Workload"]
+
+        GEN -->|inference framework| VLLM
+        GEN -->|alternative framework| TRITON
+        TRAD -->|serving API| FASTAPI
+        VLLM --> GPU_SELECT
+        TRITON --> GPU_SELECT
+        FASTAPI -.->|if GPU required| GPU_SELECT
+    end
+
+    subgraph GPU_INFRA["Hard Artifacts - Kubernetes / OpenShift GPU Infrastructure"]
+        GPU_FARM["NVIDIA GPU Farm"]
+        MIG["MIG GPU Partitions<br/>for Smaller Models"]
+    end
+
+    subgraph SECURITY["Total AI Security Framework"]
+        GUARD["Guardrail"]
+        RED_TEAM["AI Red Teaming"]
+        CONT_MONITOR["Continuous GenAI Inference Monitoring"]
+    end
+
+    ML_TRAIN -->|register trained models| REG
+    ML_THIRD -->|register 3rd party models| REG
+    REG -->|deploy / serve models| GEN
+    REG -->|deploy / serve models| TRAD
+    PROMPT -->|provide versioned prompts| GUARD
+    PROMPT -->|provide versioned prompts| APPLICATION
+    SCAN <-.->|vulnerability scans| RED_TEAM
+    EXT -->|scan / register models| REG
+    SERVING -->|prediction results| TRACING
+    DRIFT <-.->|drift monitoring| TRACING
+    AUDIT -->|audit logging| TRACING_AUDIT
+    CONT_MONITOR <-.-> |monitor genai activity|TRACING
+
+    GPU_SELECT -->|run on suitable GPU resources| GPU_FARM
+    GPU_SELECT -.->|optional partition| MIG
+    GPU_FARM --- MIG
+    SERVING -.->|inference telemetry / autoscaling metrics| GRAFANA
+
+    classDef central fill:#e5eefc,stroke:#245a9b,stroke-width:2px,color:#102a43
+    classDef normal fill:#f7fafc,stroke:#718096,color:#102a43
+    classDef security fill:#fff7e6,stroke:#c9973a,color:#604400
+    classDef ext fill:#f3e9fc,stroke:#8854b0,stroke-width:2px,color:#542b79
+    classDef application fill:#e8f4e8,stroke:#38834a,stroke-width:2px,color:#20532c
+    classDef infra fill:#e9f4f5,stroke:#397b82,stroke-width:2px,color:#22565c
+
+    class REG,SCAN,DRIFT,AUDIT,PROMPT central
+    class GEN,TRAD,VLLM,TRITON,FASTAPI,GPU_SELECT normal
+    class GUARD,RED_TEAM,CONT_MONITOR security
+    class EXT ext
+    class APPLICATION application
+    class GPU_FARM,MIG infra
+    class ML_TRAIN,ML_THIRD ext
+
+    style MLOPS fill:#f0f5ff,stroke:#245a9b,stroke-width:2px
+    style SERVING fill:#f7fafc,stroke:#718096,stroke-width:2px
+    style SECURITY fill:#fff7e6,stroke:#c9973a,stroke-width:2px
+    style GPU_INFRA fill:#eef8f8,stroke:#397b82,stroke-width:2px
+    style ML_SOURCE fill:#faf5ff,stroke:#8854b0,stroke-width:2px

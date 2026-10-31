@@ -1,0 +1,67 @@
+flowchart TB
+    USER["User / Model Requester"]
+    SOURCE["External Model Sources<br/>Hugging Face / GitHub"]
+
+    subgraph MLOPS["MLOps / GenAI Ops Platform"]
+        REQUEST["Model Request Form"]
+        REVIEW["Supervisor Review<br/>Documented Approval / Rejection"]
+        REG["Model Registry"]
+    end
+
+    subgraph PIPELINE["External GenAI Model Download Pipeline"]
+        REPORT["Review Repository<br/>Vulnerability Reports"]
+        REPO_GATE{"Blocking source<br/>vulnerability?"}
+        SANDBOX["Download to Secure Sandbox"]
+        SCAN["Model Attack-Vector Scan<br/>and Antivirus Scan"]
+        SCAN_GATE{"Blocking findings<br/>after scanning?"}
+        QUARANTINE["Quarantine Model<br/>Notify MLOps"]
+        EXCEPTION["Requester Submits<br/>Review Form"]
+        APPROVAL{"Supervisor<br/>approves?"}
+        COPY["Copy Approved Model Files"]
+        REJECT["Reject / Do Not Register"]
+    end
+
+    subgraph TOOLS["Scanning Tools - Options"]
+        OSS["OSS: ClamAV / ProtectAI"]
+        PALO["Palo Alto Prisma AIRS"]
+        CROWD["CrowdStrike Falcon Guardian"]
+    end
+
+    S3["Enterprise S3 Object Storage"]
+
+    USER -->|request GenAI model| REQUEST
+    REQUEST --> REPORT
+    SOURCE -.->|repository information| REPORT
+    REPORT --> REPO_GATE
+    REPO_GATE -->|yes| REJECT
+    REPO_GATE -->|no| SANDBOX
+    SOURCE -->|model download| SANDBOX
+    SANDBOX --> SCAN
+    TOOLS -.->|scanning capabilities| SCAN
+    SCAN --> SCAN_GATE
+    SCAN_GATE -->|no| COPY
+    SCAN_GATE -->|yes| QUARANTINE
+    QUARANTINE --> EXCEPTION
+    EXCEPTION --> REVIEW
+    REVIEW --> APPROVAL
+    APPROVAL -->|no| REJECT
+    APPROVAL -->|yes, documented exception| COPY
+    COPY --> S3
+    S3 -->|register usable model| REG
+
+    classDef central fill:#e5eefc,stroke:#245a9b,stroke-width:2px,color:#102a43
+    classDef normal fill:#f7fafc,stroke:#718096,color:#102a43
+    classDef security fill:#fff7e6,stroke:#c9973a,color:#604400
+    classDef ext fill:#f3e9fc,stroke:#8854b0,stroke-width:2px,color:#542b79
+    classDef application fill:#e8f4e8,stroke:#38834a,stroke-width:2px,color:#20532c
+    classDef blocked fill:#fce8e6,stroke:#b85450,stroke-width:2px,color:#742c29
+
+    class REQUEST,REVIEW,REG central
+    class USER application
+    class SOURCE,OSS,PALO,CROWD ext
+    class REPORT,SANDBOX,SCAN,COPY,S3 normal
+    class REPO_GATE,SCAN_GATE,EXCEPTION,APPROVAL,QUARANTINE security
+    class REJECT blocked
+    style MLOPS fill:#f0f5ff,stroke:#245a9b,stroke-width:2px
+    style PIPELINE fill:#f7fafc,stroke:#718096,stroke-width:2px
+    style TOOLS fill:#faf5ff,stroke:#8854b0,stroke-width:2px

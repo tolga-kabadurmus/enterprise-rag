@@ -184,7 +184,7 @@ The indexing CronJob or Job must default to `python -m app.main --pipeline v1 --
 - Handle empty documents, unsupported content types, extraction failures, embedding/provider failures, and vector database failures without corrupting the batch state.
 - Log object identifiers, document counts, chunk counts, elapsed time, and failures. Do not log secret values or full document contents by default.
 
-## PLANNED: VERSIONED S3 DOCUMENT INDEXING PIPELINE
+## S3 DOCUMENT INDEXING PIPELINE
 - Status: approved design for later implementation; do not describe it as implemented until its code and tests exist.
 - Treat the CLI `--pipeline` value as a workflow version, initially `v1`, rather than as a document content type. Keep older pipeline behavior stable when a later version such as `v2` is introduced.
 - Keep the three selection responsibilities distinct:

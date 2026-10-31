@@ -50,7 +50,7 @@ The working prototype must:
 - `enterprise-rag-deployment`: Kubernetes deployment repository developed with HelmChart.
 - `enterprise-rag-embedding-service`: Dedicated FastAPI service that loads the shared embedding model once and produces compatible document and query vectors; indexing consumes it now and query integration remains planned.
 - `enterprise-rag-indexing`: Implements the disposable, asynchronous document indexing pipeline.
-- `enterprise-rag-query`: Implements the retrieval-and-answering application; detailed design is to be defined later. The minimum end-to-end prototype must nevertheless retrieve indexed chunks, call an LLM, and return the answer with sources.
+- `enterprise-rag-retrieval`: Implements the retrieval-and-answering application; detailed design is to be defined later. The minimum end-to-end prototype must nevertheless retrieve indexed chunks, call an LLM, and return the answer with sources.
 - `enterprise-rag`: Orchestration repository containing the other repositories as Git submodules, shared deployment configuration, and `docker-compose.yaml`. Frankly the root repository.
 - All environment variable files (*.env) must be placed on the ./dev-envs folder inside the root repository.
 - For ech sub repository a seperate environment variable file is mandatory named as ./dev-envs{{of the root repository}}/{{sub-repo-name}}.env and must be used in its own docker-compose service
@@ -68,7 +68,7 @@ The working prototype must:
   - rustfs
   - enterprise-rag-embedding-service
   - enterprise-rag-indexing
-  - enterprise-rag-query
+  - enterprise-rag-retrieval
 
 - Every subchart:
   - Must have its own `Chart.yaml`.
@@ -94,8 +94,8 @@ The working prototype must:
   - `enterprise-rag-embedding-service` must run as a long-running FastAPI/Granian Deployment and expose an internal Kubernetes Service. Its readiness probe must not succeed until the embedding model is loaded.
   - `enterprise-rag-indexing` must run as a disposable CronJob or Job, with the default command `python -m app.main --pipeline v1 --concurrency 4`; environment-specific values may override the command.
   - `enterprise-rag-indexing` must run as a disposable Kubernetes Job or CronJob, not as a continuously running Deployment.
-  - `enterprise-rag-query` must run as a Deployment.
-  - `enterprise-rag-query` is a FastAPI/Granian Deployment with an internal Service and optional standard Kubernetes Ingress. Do not require an NGINX-specific controller or annotations.
+  - `enterprise-rag-retrieval` must run as a Deployment.
+  - `enterprise-rag-retrieval` is a FastAPI/Granian Deployment with an internal Service and optional standard Kubernetes Ingress. Do not require an NGINX-specific controller or annotations.
   - Configure readiness/liveness probes where appropriate.
   - Configure CPU and memory requests/limits through Helm values.
   - Never hardcode credentials or sensitive information into Helm templates or committed values files.
@@ -123,9 +123,9 @@ enterprise-rag-deployment/              # Helm umbrella chart
     ├── rustfs/                        # Persistent S3-compatible storage
     ├── enterprise-rag-embedding-service/ # Shared embedding API Deployment
     ├── enterprise-rag-indexing/       # On-demand Job / optional CronJob
-    └── enterprise-rag-query/          # Long-running API Deployment
+    └── enterprise-rag-retrieval/          # Long-running API Deployment
 ```
-Default application image names are `enterprise-rag-query`, `enterprise-rag-enterprise-rag-indexing`, and `enterprise-rag-embedding-service`; every image name and tag remains configurable through values files.
+Default application image names are `enterprise-rag-retrieval`, `enterprise-rag-enterprise-rag-indexing`, and `enterprise-rag-embedding-service`; every image name and tag remains configurable through values files.
 Each subchart contains its own `Chart.yaml`, default `values.yaml`, and `templates/` directory. Kubernetes resources should be defined in separate, purpose-named files when needed, such as `deployment.yaml`, `statefulset.yaml`, `job.yaml`, `cronjob.yaml`, `service.yaml`, `configmap.yaml`, `secret.yaml`, `pvc.yaml`, and `ingress.yaml`. Shared template helpers belong in `_helpers.tpl`. Unused resource templates should not be created. Do not create ServiceAccount templates; use the cluster default ServiceAccount.
 
 The parent chart must provide `values-dev.yaml`, `values-int.yaml`, `values.uat.yaml`, and `values-prod.yaml`. Service endpoints, image references, commands, schedules, storage, and resource settings must be configurable through these files. Secret values must not be committed. Each `secret.yaml` must contain the comment `to be implemented by an enterprise vault` and support references to an existing Secret where appropriate. Match each secret-bearing `.env` file to its owning Helm subchart rather than sharing unrelated credentials across charts.
@@ -135,7 +135,7 @@ The indexing CronJob or Job must default to `python -m app.main --pipeline v1 --
 ## enterprise-rag-embedding-service
 - Status: FastAPI/Granian model-vectorization service implemented for local development; indexing now consumes its HTTP contract, while query migration and Kubernetes deployment remain planned.
 - Implement it as a dedicated long-running FastAPI application served by Granian.
-- Its only business responsibility is embedding vectorization. It accepts document chunks from `enterprise-rag-indexing` and user questions from `enterprise-rag-query`, then returns vectors produced by the same configured model and revision.
+- Its only business responsibility is embedding vectorization. It accepts document chunks from `enterprise-rag-indexing` and user questions from `enterprise-rag-retrieval`, then returns vectors produced by the same configured model and revision.
 - Keep the request intent explicit so the service can apply model-specific document and query preparation consistently. For `intfloat/multilingual-e5-small`, document inputs use the `passage:` prefix and query inputs use the `query:` prefix.
 - The service owns model artifact synchronization, tokenization, inference, pooling, normalization, batching, and reporting its model identity and vector dimension.
 - The service must not own S3 document discovery, document extraction, chunking, Qdrant persistence/retrieval, prompt construction, or LLM calls.
@@ -207,7 +207,7 @@ The indexing CronJob or Job must default to `python -m app.main --pipeline v1 --
 - Unit-test S3 pagination, exact-key access, configuration, cleanup, factory routing, MIME normalization, unsupported types, bounded concurrency, deterministic IDs, and per-object failure isolation with fakes/mocks. Keep live RustFS checks in separate integration tests.
 - Update MkDocs and README documentation with the same implementation change, including the `v1` lifecycle, S3 environment variables, supported MIME mappings, mocked behavior, concurrency, retry limitations, and generated API references. Validate with unit tests, `mkdocs build --strict`, and `docker compose --profile dev config`.
 
-## enterprise-rag-query
+## enterprise-rag-retrieval
 - Detailed internal design: to be defined later.
 - Minimum required behavior for the coding exercise:
   - Accept a user question.
@@ -223,14 +223,14 @@ The indexing CronJob or Job must default to `python -m app.main --pipeline v1 --
 - Streaming, reranking, hybrid search, memory, and multi-agent behavior remain future enhancements unless explicitly requested.
 
 ## enterprise-rag
-- Orchestrate the complete stack, retaining `enterprise-rag-embedding-service`, `enterprise-rag-indexing`, `enterprise-rag-query`, and `enterprise-rag-deployment` as Git submodules.
+- Orchestrate the complete stack, retaining `enterprise-rag-embedding-service`, `enterprise-rag-indexing`, `enterprise-rag-retrieval`, and `enterprise-rag-deployment` as Git submodules.
 - Keep `docker-compose.yaml` in this orchestration repository.
 - Include:
   - Qdrant service with a named Docker volume for persistence.
   - RustFS service with a dedicated named Docker volume for persistence.
   - `enterprise-rag-embedding-service` as a long-running internal FastAPI/Granian service with model storage, health checks, and a development source bind mount.
   - `enterprise-rag-indexing` service with a bind mount of the local source directory for fast development.
-  - `enterprise-rag-query` service for the working end-to-end RAG demonstration.
+  - `enterprise-rag-retrieval` service for the working end-to-end RAG demonstration.
 - Keep indexing as an on-demand, one-shot Compose job; do not force it to run indefinitely as a daemon.
 - Make indexing and query depend on embedding-service readiness once their embedding HTTP clients are implemented; container startup alone is not readiness.
 - Use health checks and appropriate startup dependencies where useful; readiness must be verified by the client and must not be assumed from container startup alone.
@@ -259,7 +259,7 @@ The indexing CronJob or Job must default to `python -m app.main --pipeline v1 --
 - Prefer Python standard library features where sufficient. Avoid introducing a framework when a small, readable module does the job.
 
 ## Clean Architecture conventions
-- For each python repository (for example enterprise-rag-indexing and enterprise-rag-query):
+- For each python repository (for example enterprise-rag-indexing and enterprise-rag-retrieval):
   - all codes must be placed on the /app directory at the containr
   - all repository classes must be placed at /app/repository directory with a hierarchical way
   - all repository classes must be placed at /app/repository directory with a hierarchical way

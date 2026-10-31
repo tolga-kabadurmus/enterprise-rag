@@ -11,14 +11,14 @@ For architecture, coding standards, project boundaries, and implementation guida
 - `enterprise-rag` — orchestrates the complete stack and tracks the component repositories as Git submodules.
 - `enterprise-rag-embedding-service` — FastAPI/Granian API that synchronizes and loads the shared embedding model once and vectorizes both document chunks and user questions.
 - `enterprise-rag-indexing` — provides a disposable, asynchronous indexing pipeline for documents in RustFS through its S3-compatible API.
-- `enterprise-rag-query` — provides the planned FastAPI/Granian RAG query API.
+- `enterprise-rag-retrieval` — provides the planned FastAPI/Granian RAG query API.
 - `enterprise-rag-deployment` — provides the Helm umbrella chart and component subcharts for Kubernetes/OpenShift.
 
 ```text
 enterprise-rag (Docker Compose)
 ├── enterprise-rag-embedding-service/ # Git submodule; planned embedding API
 ├── enterprise-rag-indexing/          # Git submodule; one-shot indexing job
-├── enterprise-rag-query/             # Git submodule; planned RAG query API
+├── enterprise-rag-retrieval/             # Git submodule; planned RAG query API
 ├── enterprise-rag-deployment/        # Git submodule; Helm umbrella chart
 ├── RustFS                            # Compose service; S3-compatible objects
 └── Qdrant                            # Compose service; vectors + source metadata
@@ -33,7 +33,7 @@ flowchart LR
     Deployment[enterprise-rag-deployment<br/>Helm umbrella chart]
     Indexing[enterprise-rag-indexing<br/>Job / CronJob]
     Embedding[enterprise-rag-embedding-service<br/>FastAPI + Granian Deployment]
-    Query[enterprise-rag-query<br/>FastAPI + Granian Deployment]
+    Query[enterprise-rag-retrieval<br/>FastAPI + Granian Deployment]
     RustFS[(RustFS)]
     Qdrant[(Qdrant)]
     LLM[Configurable LLM]
@@ -56,7 +56,7 @@ sequenceDiagram
     participant I as enterprise-rag-indexing
     participant E as enterprise-rag-embedding-service
     participant V as Qdrant
-    participant Q as enterprise-rag-query
+    participant Q as enterprise-rag-retrieval
 
     I->>E: Document chunks (document input type)
     E-->>I: Normalized document vectors + model metadata
@@ -71,10 +71,10 @@ sequenceDiagram
 To add the component repositories to an existing `enterprise-rag` orchestration repository (run in its root directory):
 ```bash
 git submodule add https://github.com/tolga-kabadurmus/enterprise-rag-indexing.git enterprise-rag-indexing
-git submodule add https://github.com/tolga-kabadurmus/enterprise-rag-query.git enterprise-rag-query
+git submodule add https://github.com/tolga-kabadurmus/enterprise-rag-retrieval.git enterprise-rag-retrieval
 git submodule add https://github.com/tolga-kabadurmus/enterprise-rag-deployment.git enterprise-rag-deployment
 git submodule add https://github.com/tolga-kabadurmus/enterprise-rag-embedding-service.git enterprise-rag-embedding-service
-git add .gitmodules enterprise-rag-indexing enterprise-rag-query enterprise-rag-deployment enterprise-rag-embedding-service
+git add .gitmodules enterprise-rag-indexing enterprise-rag-retrieval enterprise-rag-deployment enterprise-rag-embedding-service
 git commit -m "Add Enterprise RAG component submodules"
 ```
 ### Listing the submodules
@@ -97,6 +97,22 @@ git pull --ff-only
 git submodule update --init --recursive
 ```
 To intentionally advance a submodule to newer commits, update it inside its directory, then commit the changed submodule pointer from the parent repository. `git submodule update --remote` is another option when a tracking branch is configured; it should not be confused with checking out the parent repository's pinned versions.
+
+## Configuration
+
+Local configuration is owned by the orchestration repository under `dev-envs/`. Docker Compose loads one environment file per service; application settings are validated by the component's Pydantic `BaseSettings` classes. Copy the committed safe template to the corresponding Git-ignored file and replace placeholder credentials. The retrieval template is currently named `enterprise-rag-retrieval.example`; the other templates use the `.env.example` suffix.
+
+| Runtime owner | Local file | Environment variables |
+| --- | --- | --- |
+| RustFS | `rustfs.env` from `rustfs.env.example` | `RUSTFS_ACCESS_KEY`, `RUSTFS_SECRET_KEY`, `RUSTFS_ADDRESS`, `RUSTFS_CONSOLE_ADDRESS`, `RUSTFS_CONSOLE_ENABLE`, `RUSTFS_OBS_LOGGER_LEVEL` |
+| Qdrant | `qdrant.env` from `qdrant.env.example` | `QDRANT__SERVICE__HTTP_PORT`, `QDRANT__SERVICE__GRPC_PORT`, `QDRANT__LOG_LEVEL` |
+| Embedding service | `enterprise-rag-embedding-service.env` from `enterprise-rag-embedding-service.env.example` | `EMBEDDING_SERVICE_*` API limits, `S3_*` model-storage access, and `EMBEDDINGS_*` model identity/artifact paths |
+| Indexing job | `enterprise-rag-indexing.env` from `enterprise-rag-indexing.env.example` | `S3_*`, `INDEXING_*`, `PDF_CHUNK_*`, `EMBEDDING_SERVICE_*`, `VECTOR_*`, and `QDRANT_*` settings |
+| Retrieval API | `enterprise-rag-retrieval.env` from `enterprise-rag-retrieval.example` | `QUERY_API_*`, `EMBEDDING_SERVICE_*`, `QDRANT_*`, `RAG_*`, `RERANKING_*`, and `LLM_*` settings |
+| Diagnostic scripts | `diagnostics.env` from `diagnostics.env.example` | Host-facing `S3_ENDPOINT_URL`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `S3_REGION`, `QDRANT_URL`, and `QDRANT_API_KEY` |
+
+Container-to-container endpoints use Compose service names such as `http://rustfs:9000`, `http://qdrant:6333`, and `http://enterprise-rag-embedding-service:8081`; host-run diagnostics use published `localhost` ports. The embedding model identity and dimension, Qdrant collection/vector names, and embedding response expectations must agree across embedding, indexing, and retrieval. Never commit the real `.env` files or credentials. See each component README for variable-level defaults and constraints.
+
 ## Run the complete project
 Prerequisites: Docker Engine with the Compose v2 plugin; Git; Python 3.12.3 and `virtualenv` for host-based Python development. The primary target is Ubuntu 24.04.4 LTS.
 Clone with submodules using the command above, or update them if already cloned. Copy each file in `dev-envs/` by removing its `.example` suffix, then set RustFS credentials, S3 endpoints, Qdrant connection details, and embedding/LLM provider settings. Each application has its own root-level environment file, including `dev-envs/enterprise-rag-embedding-service.env`. Only safe `.env.example` templates belong in Git; do not commit real environment files or secrets.
@@ -145,3 +161,7 @@ A local source bind mount for the indexing service is required by `AGENTS.md`; p
 MkDocs is the chosen documentation framework; project-specific READMEs remain useful for local development.
 Hybrid search, reranking, response streaming, conversation memory, multi-agent workflows, evaluations, Helm, CI/CD, and dashboards are optional follow-on features, not claims about the initial prototype.
 This README documents the intended repository and developer workflow. Keep it synchronized with the actual Docker Compose service names, environment templates, entrypoints, API paths, and host ports as implementation proceeds.
+
+## Current limitations
+
+no authenticationno authorization procesed have been covered at the project

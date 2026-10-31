@@ -1,0 +1,96 @@
+flowchart LR
+    USER[Real User]
+    APP[Enterprise Applications]
+    USEROIDC[User OIDC]
+    APPOIDC[Application OIDC]
+    AGENTOIDC[Agent OIDC]
+    CA[mTLS Certificate Authority - SecTrail]
+    AUTHZ[Enterprise RBAC / ABAC]
+    GATEWAY[AI Gateway]
+    MODEL[GenAI Model Serving]
+    OBS[Telemetry / Tracing / Audit]
+
+    subgraph CONTROL[Agent Control Plane / Agentic Development Platform]
+        REG[Agent Registry]
+        TOOLREG[Tool Registry]
+        IDBIND[Workload Identity Enrollment / Validation]
+        DEPLOY[Agent Deployment / Lifecycle]
+        POLICY[Agent and Tool Policy Metadata]
+    end
+
+    subgraph RUNTIME[Kubernetes / OpenShift - Agent Runtime]
+        subgraph OBO[On-Behalf-Of Agent]
+            OBOAG[Agent Runtime]
+            OBOSIDE[Authentication Sidecar]
+        end
+        subgraph AUTO[Autonomous Agent]
+            AUTOAG[Agent Runtime]
+            AUTOSIDE[Authentication Sidecar]
+        end
+    end
+
+    subgraph ACCESS[MCP / Enterprise Service Access]
+        MCP[MCP Gateway - p-Nyx]
+        ESB[Enterprise Service Bus - Optional]
+        DS1[Domain Service 1]
+        DS2[Domain Service 2]
+    end
+
+    USER -->|authenticate| USEROIDC
+    APP -->|authenticate| APPOIDC
+    USER -->|delegate task and user token| OBOAG
+    APP -->|invoke agent| AUTOAG
+
+    DEPLOY -->|deploy registered versions| RUNTIME
+    REG -->|agent identity / versions| IDBIND
+    REG -->|agent capabilities / endpoints| POLICY
+    TOOLREG -->|tool definitions / allowed operations| POLICY
+    POLICY -.->|policy inputs; not an auth decision| AUTHZ
+
+    RUNTIME -->|bootstrap workload identity and agent ID| IDBIND
+    RUNTIME -.->|K8s service account identity / attestation| IDBIND
+    IDBIND -->|validate deployment and approved registration| REG
+    IDBIND -->|authorize certificate enrollment| CA
+    RUNTIME <-->|short-lived mTLS certificate and renewal| CA
+
+    OBOAG <-->|local credential requests| OBOSIDE
+    AUTOAG <-->|local credential requests| AUTOSIDE
+    OBOSIDE <-->|RFC 8693 user delegation + agent mTLS identity| AGENTOIDC
+    AUTOSIDE <-->|agent-only scoped token + mTLS identity| AGENTOIDC
+    RUNTIME -.->|issuer trust / subject validation for delegation| AGENTOIDC
+    AGENTOIDC -.->|delegation and agent authorization policy| AUTHZ
+
+    RUNTIME -->|Agent Access Token - audience p-Nyx| MCP
+    MCP -->|validate issuer, audience, expiry, scopes and identity| AGENTOIDC
+    MCP <-->|agent-tool-operation authorization| AUTHZ
+    MCP -->|request target API credential - audience domain service| AGENTOIDC
+    MCP -->|separate domain credential + authorized API call| DS1
+    MCP -->|separate domain credential - optional ESB route| ESB
+    ESB --> DS2
+    DS1 <-->|resource / object-level authorization| AUTHZ
+    DS2 <-->|resource / object-level authorization| AUTHZ
+
+    RUNTIME -->|inference requests| GATEWAY
+    GATEWAY --> MODEL
+    OBOAG -.->|agent activity and trace IDs| OBS
+    AUTOAG -.->|agent activity and trace IDs| OBS
+    AGENTOIDC -.->|token and delegation audit| OBS
+    IDBIND -.->|enrollment audit| OBS
+    MCP -.->|tool invocation / authorization decisions| OBS
+    DS1 -.->|domain access decisions| OBS
+    DS2 -.->|domain access decisions| OBS
+    GATEWAY -.->|inference telemetry| OBS
+
+    classDef central fill:#e5eefc,stroke:#245a9b,stroke-width:2px,color:#102a43
+    classDef normal fill:#f7fafc,stroke:#718096,color:#102a43
+    classDef application fill:#e8f4e8,stroke:#38834a,stroke-width:2px,color:#20532c
+    classDef security fill:#fff7e6,stroke:#c9973a,stroke-width:2px,color:#604400
+    classDef ext fill:#f3e9fc,stroke:#8854b0,stroke-width:2px,color:#542b79
+    class REG,TOOLREG,IDBIND,DEPLOY,POLICY,MCP,GATEWAY central
+    class OBOAG,AUTOAG,USER,APP application
+    class OBOSIDE,AUTOSIDE,USEROIDC,APPOIDC,AGENTOIDC,CA,AUTHZ security
+    class DS1,DS2,ESB,MODEL normal
+    class OBS ext
+    style CONTROL fill:#f0f5ff,stroke:#245a9b,stroke-width:2px
+    style RUNTIME fill:#f7fafc,stroke:#718096,stroke-width:2px
+    style ACCESS fill:#f7fafc,stroke:#718096,stroke-width:2px

@@ -1,0 +1,92 @@
+flowchart LR
+    subgraph CLIENT_CONTAINER[Enterprise Document Sources]
+        USER[Real Users]
+        APP[Enterprise / External Applications]
+    end
+
+    UI[Document Registry UI]
+    LOAD[Document Load]
+    EVENT[Event Driven Architecture]
+    MCP[MCP - Source Access]
+
+    subgraph SOURCE[Enterprise Document Sources]
+        SP[SharePoint]
+        ECM[Enterprise Content Management]
+        DB@{ shape: cyl, label: "Relational / Document Databases" }
+        S3SRC@{ shape: cyl, label: "S3 Object Storage" }
+    end
+
+    subgraph GOVERNANCE[Unstructured Data Governance - Discovery and Indexing]
+        WORKFLOW[Trigger Document Discovery Workflow]
+        DISC[Scheduled Document Discovery]
+        DOCREG[MongoDB - Document Registry]
+        COMPARE{Version Compare}
+        INDEX[Index Workflow]
+        PARSE[Document Parsing]
+        CHUNK[Chunking and Embedding]
+        OBJECT[Enterprise Object Storage]
+        VECTOR[Vector Database - Upsert / Hybrid Search]
+        PERMSYNC[Document Permission Synchronization]
+    end
+
+    subgraph RAG[Enterprise RAG / Secure Document Search]
+        API[Enterprise RAG REST API]
+        RETRIEVE[Hybrid Retrieval - Vector + Keyword]
+        ANSWER[Prompt Construction / Citations / Answer]
+    end
+
+    OIDC[Enterprise OIDC]
+    AUTHZ[Enterprise RBAC / ABAC]
+    GW[AI Gateway / Model Serving]
+
+    LOAD -.->|upload/modify document content| SOURCE
+    LOAD -->|publish new/modify document event| EVENT
+    CLIENT_CONTAINER -.->|upload/modify document| LOAD
+    DISC -->|trigger workflow| WORKFLOW
+    EVENT -->|trigger workflow| WORKFLOW
+    WORKFLOW <-->|discover periodically| MCP
+    WORKFLOW --> DOCREG
+    COMPARE -.->|temp download source document| MCP
+    MCP -->|discover documents| SOURCE
+    DOCREG --> COMPARE
+    COMPARE -->|new or changed| INDEX
+    COMPARE -->|unchanged| DOCREG
+    INDEX --> PARSE
+    PARSE -->|store content / metadata| OBJECT
+    PARSE --> CHUNK
+    CHUNK --> VECTOR
+    DOCREG <-.->|serves the configuration<br/>shows lineage| UI
+    UI -->|login| OIDC
+
+    CLIENT_CONTAINER -->|document search| API
+    API -->|authenticate| OIDC
+    API -->|authorize/permissions| AUTHZ
+    MCP -.->|authorize/permissions| AUTHZ
+    UI -.->|authorize/permissions| AUTHZ
+    AUTHZ -.->|get permissions from source| SOURCE
+
+    SOURCE -.->|publish permission change event| EVENT
+    EVENT -->|trigger permission sync| PERMSYNC
+    PERMSYNC <-->|read current source permissions| MCP
+    PERMSYNC -->|update document access metadata| DOCREG
+    PERMSYNC -->|update permission filters / revoke indexed access| VECTOR
+
+    API -->|search indexed chunks| RETRIEVE
+    RETRIEVE -->|hybrid search with permission filters| VECTOR
+    RETRIEVE -->|resolve document metadata / citations| DOCREG
+    RETRIEVE -->|check requester access| AUTHZ
+    RETRIEVE -->|authorized context| ANSWER
+    ANSWER -->|inference via gateway| GW
+    ANSWER -->|answer with citations| API
+
+    classDef governance fill:#e5eefc,stroke:#245a9b,stroke-width:2px,color:#102a43
+    classDef sources fill:#f7fafc,stroke:#718096,color:#102a43
+    classDef rag fill:#fff1d6,stroke:#c58a22,stroke-width:2px,color:#805600
+    classDef auth fill:#f3e9fc,stroke:#8854b0,stroke-width:2px,color:#542b79
+    class DISC,WORKFLOW,LOAD,MCP,DOCREG,COMPARE,INDEX,PARSE,CHUNK,OBJECT,VECTOR,UI,PERMSYNC governance
+    class SP,ECM,DB,S3SRC,USER,APP sources
+    class API,RETRIEVE,ANSWER rag
+    class OIDC,AUTHZ,GW auth
+    style GOVERNANCE fill:#f0f5ff,stroke:#245a9b,stroke-width:2px
+    style SOURCE fill:#f7fafc,stroke:#718096,stroke-width:2px
+    style RAG fill:#fffaf0,stroke:#c58a22,stroke-width:2px

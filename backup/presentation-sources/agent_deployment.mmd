@@ -1,0 +1,43 @@
+flowchart TB
+    DEV["AI Product Teams"]
+    SDK["Agent Development Framework<br/>LangGraph / LangChain / Semantic Kernel<br/>AutoGen / CrewAI / Other"]
+
+    REG["Agent Registry Module"]
+    CONTROL["Agent Control Plane"]
+    VAULT["Enterprise Vault<br/>Agent Registration / Bootstrap Secret"]
+    CICD["Enterprise CI/CD"]
+
+    AGENT["Deployed AI Agent<br/>Kubernetes / OpenShift"]
+    SIDE["Authentication Sidecar"]
+    IDENTITY["Trusted Workload Identity"]
+    OIDC["Agent OIDC"]
+
+    DEV --> SDK
+    SDK -->|"register agent and metadata"| REG
+    REG -->|"store Agent ID association and bootstrap secret"| VAULT
+
+    REG <--> CONTROL
+
+    CONTROL -->|"deploy agent"| AGENT
+    CICD -->|"authorized read of deployment secret"| VAULT
+    VAULT -->|"release secret to authorized CI/CD job"| CICD
+    CICD -->|"deploy agent with Agent ID and protected bootstrap material"| AGENT
+
+    AGENT --- SIDE
+    SIDE -->|"Agent ID + bootstrap workload identity"| CONTROL
+    CONTROL -->|"validate registration and deployment"| REG
+    CONTROL -->|"approved workload identity binding"| IDENTITY
+    IDENTITY --> SIDE
+    SIDE -->|"authenticate agent"| OIDC
+
+    classDef central fill:#e5eefc,stroke:#245a9b,stroke-width:2px,color:#102a43
+    classDef normal fill:#f7fafc,stroke:#718096,color:#102a43
+    classDef application fill:#e8f4e8,stroke:#38834a,stroke-width:2px,color:#20532c
+    classDef ext fill:#f3e9fc,stroke:#8854b0,stroke-width:2px,color:#542b79
+    classDef security fill:#fff7e6,stroke:#c9973a,stroke-width:2px,color:#604400
+
+    class REG,CONTROL central
+    class DEV,SDK,AGENT application
+    class CICD,SIDE normal
+    class IDENTITY,OIDC ext
+    class VAULT security

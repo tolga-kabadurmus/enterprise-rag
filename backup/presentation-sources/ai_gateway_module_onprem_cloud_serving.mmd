@@ -1,0 +1,83 @@
+flowchart LR
+    subgraph USERS_CONTAINER["Users / Enterprise Applications / Agents"]
+        direction TB
+        USERS["Users"]
+        AGENTS["Agents"]
+        APPLICATIONS["Enterprise Applications"]
+    end
+
+    OIDC["Enterprise OIDC System"]
+    AUTHZ["Authorization<br/>MLOps Module or Enterprise RBAC/ABAC Platform"]
+    FINOPS["Cost Management<br/>(FinOps)"]
+
+    subgraph SERVING["Model Serving"]
+        direction TB
+        ONPREM["On-Prem Model Serving Module"]
+        CLOUD["Cloud Provider Frontier Models"]
+    end
+
+    subgraph GW["AI Gateway Module"]
+        direction TB
+        AUTHN["Authentication"]
+        AUTHORIZATION["Authorization"]
+        GW_SECURITY["Security"]
+        TRACE["Traceability"]
+        RATE["Rate Limiting / Throttling"]
+        SEMANTIC["Semantic Routing<br/>Select suitable, lower-cost model for task"]
+        CACHE["Context Caching<br/>Reuse responses for similar, permitted requests"]
+        TRAFFIC["Traffic-Aware Routing<br/>Route to less-loaded inference service"]
+        COST["Token Usage / Cost Telemetry"]
+    end
+
+    subgraph SECURITY["Total AI Security Framework"]
+        direction TB
+        DLP["DLP"]
+        PII["PII"]
+        GUARD["Guardrail"]
+    end
+
+    subgraph TRACING["Hard Artifacts - Monitoring and Tracing"]
+        GRAFANA["Time Series<br/>Tracing/Observability"]
+        KIBANA["Log Tracing"]
+        TRACING_AUDIT["Audit Logs"]
+    end
+
+    USERS_CONTAINER -->|consume AI services| GW
+    AUTHN <-->|validate access token| OIDC
+    AUTHORIZATION <-->|check model access permissions| AUTHZ
+
+    TRACE -->|metrics / traces| GRAFANA
+    TRACE -->|diagnostic logs| KIBANA
+    TRACE -->|audit records| TRACING_AUDIT
+
+    RATE -->|apply usage controls| SEMANTIC
+    SEMANTIC -->|selected model| CACHE
+    CACHE -->|cache miss / no reuse| TRAFFIC
+
+    TRAFFIC -->|route inference requests| ONPREM
+    TRAFFIC -->|route inference requests| CLOUD
+
+    COST -->|token usage by user / app / agent| FINOPS
+    FINOPS -.->|self-service usage / cost dashboard| USERS
+
+    GW_SECURITY <-->|inspect / block requests| DLP
+    GW_SECURITY <-->|mask / restore sensitive values| PII
+    GW_SECURITY <-->|pre-inference checks| GUARD
+
+    classDef central fill:#e5eefc,stroke:#245a9b,stroke-width:2px,color:#102a43
+    classDef normal fill:#f7fafc,stroke:#718096,color:#102a43
+    classDef application fill:#e8f4e8,stroke:#38834a,stroke-width:2px,color:#20532c
+    classDef ext fill:#f3e9fc,stroke:#8854b0,stroke-width:2px,color:#542b79
+    classDef security fill:#fff7e6,stroke:#c9973a,stroke-width:2px,color:#604400
+
+    class AUTHN,AUTHORIZATION,TRACE,RATE,SEMANTIC,CACHE,TRAFFIC,COST central
+    class GW_SECURITY,DLP,PII,GUARD security
+    class OIDC,AUTHZ,FINOPS,CLOUD ext
+    class USERS,AGENTS,APPLICATIONS application
+    class ONPREM,GRAFANA,KIBANA,TRACING_AUDIT normal
+
+    style USERS_CONTAINER fill:#e8f4e8,stroke:#38834a,stroke-width:2px
+    style GW fill:#f0f5ff,stroke:#245a9b,stroke-width:2px
+    style SERVING fill:#f7fafc,stroke:#718096,stroke-width:2px
+    style SECURITY fill:#fffaf0,stroke:#c9973a,stroke-width:2px
+    style TRACING fill:#f7fafc,stroke:#718096,stroke-width:2px

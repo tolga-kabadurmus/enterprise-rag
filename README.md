@@ -6,6 +6,9 @@ The target prototype indexes PDF documents from S3-compatible storage, chunks th
 
 For architecture, coding standards, project boundaries, and implementation guidance, see [`AGENTS.md`](AGENTS.md).
 
+You must review each component project's `README.md` to understand its detailed
+behavior and maintain informed control over the complete architecture.
+
 ## Repositories
 
 - `enterprise-rag` — orchestrates the complete stack and tracks the component repositories as Git submodules.
